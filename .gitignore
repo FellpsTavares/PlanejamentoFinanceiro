@@ -1,0 +1,269 @@
+# ============================================================================
+# PYTHON / DJANGO
+# ============================================================================
+
+# Virtual environments
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Django
+*.sqlite3
+*.db
+db.sqlite3
+local_settings.py
+/media/
+/staticfiles/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+*.pyc
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# ============================================================================
+# NODE.JS / REACT / VITE
+# ============================================================================
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Vite
+dist/
+dist-ssr/
+*.local
+
+# Build
+build/
+out/
+
+# ============================================================================
+# IDE / EDITOR
+# ============================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.VS_Code
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+.vim/
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================================================
+# ENVIRONMENT / CONFIGURATION
+# ============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.*.example
+!.env.example
+
+# Configuration files
+config.ini
+settings.local.py
+local*.py
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash*
+
+# ============================================================================
+# DATABASE / LOGS
+# ============================================================================
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+# Logs
+logs/
+*.log
+*.log.*
+log.txt
+npm-debug.log
+pip-log.txt
+
+# ============================================================================
+# TESTING
+# ============================================================================
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage_html_report/
+.pytest_cache/
+
+# Test reports
+test-results.xml
+junit.xml
+nosetests.xml
+
+# ============================================================================
+# SECURITY / SENSITIVE
+# ============================================================================
+
+# API Keys
+*.key
+*.pem
+secrets.json
+credentials.json
+private_key.pem
+
+# AWS
+.aws/
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+
+# Uploads / Media
+uploads/
+media/
+temp/
+tmp/
+
+# ============================================================================
+# DOCKER
+# ============================================================================
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# ============================================================================
+# PROJECT SPECIFIC
+# ============================================================================
+
+# Django migrations (opcional - manter na maioria dos casos)
+# migrations/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS temp
+.~*
+.Document Recovery
+
+# IDE system files
+.classpath
+.project
+.c9/
+*.launch
+.settings/
+
+# ============================================================================
+# CI/CD
+# ============================================================================
+
+# GitHub Actions
+.github/workflows/.tmp/
+
+# GitLab CI
+.gitlab-ci.local.yml
+
+# Jenkins
+.jenkins/
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+# Local documentation builds
+docs/_build/
+site/
+
+# ============================================================================
+# MONITORES / PROFILING
+# ============================================================================
+
+# Memory dumps
+*.heapsnapshot
+*.prof
+
+# ============================================================================
+# MISC
+# ============================================================================
+
+# Folder config file for Mac
+Desktop.ini
+
+# System files
+.Thumbs.db
+.DS_Store
+
+# Lock files (uncomment if using specific package managers)
+# package-lock.json
+# yarn.lock
