@@ -5,11 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
 from datetime import datetime, timedelta
-from .models import Category, Transaction
+from .models import Category, Transaction, RecurringTransaction, Investment
+from .services.brapi_service import get_current_price
 from .serializers import (
     CategorySerializer, TransactionSerializer,
     TransactionListSerializer, TransactionCreateUpdateSerializer,
-    TransactionSummarySerializer
+    TransactionSummarySerializer, RecurringTransactionSerializer, InvestmentSerializer
 )
 
 
@@ -181,8 +182,50 @@ class TransactionViewSet(viewsets.ModelViewSet):
             'by_month': sorted(by_month, key=lambda x: (x['year'], x['month'])),
         }
         
+        # serializer espera um dict com os campos
         serializer = TransactionSummarySerializer(data)
         return Response(serializer.data)
+
+
+class RecurringTransactionViewSet(viewsets.ModelViewSet):
+    serializer_class = RecurringTransactionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return RecurringTransaction.objects.filter(tenant=self.request.user.tenant)
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=self.request.user.tenant, user=self.request.user)
+
+
+class InvestmentViewSet(viewsets.ModelViewSet):
+    serializer_class = InvestmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Investment.objects.filter(tenant=self.request.user.tenant)
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=self.request.user.tenant)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        data = []
+        for inv in queryset:
+            current = get_current_price(inv.ticker)
+            pnl = None
+            if current is not None:
+                pnl = (float(current) - float(inv.buy_price)) * float(inv.quantity)
+            data.append({
+                'id': str(inv.id),
+                'ticker': inv.ticker,
+                'buy_price': float(inv.buy_price),
+                'quantity': float(inv.quantity),
+                'buy_date': inv.buy_date,
+                'current_price': current,
+                'pnl': pnl,
+            })
+        return Response(data)
     
     @action(detail=False, methods=['get'])
     def by_date_range(self, request):

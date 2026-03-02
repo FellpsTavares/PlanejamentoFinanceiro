@@ -8,6 +8,7 @@ export default function NewTransaction() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -32,6 +33,19 @@ export default function NewTransaction() {
       setCategories(data.results || data);
     } catch (err) {
       setError('Erro ao carregar categorias');
+      console.error(err);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName) return;
+    try {
+      const payload = { name: newCategoryName, type: formData.type };
+      const created = await transactionService.createCategory(payload);
+      setCategories((prev) => [...prev, created]);
+      setNewCategoryName('');
+    } catch (err) {
+      setError('Erro ao criar categoria');
       console.error(err);
     }
   };
@@ -186,6 +200,20 @@ export default function NewTransaction() {
                   </option>
                 ))}
               </select>
+
+              {/* Criar nova categoria rapidamente */}
+              <div className="mt-2 flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Nova categoria"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="input-field flex-1"
+                />
+                <button type="button" onClick={handleCreateCategory} className="btn-secondary">
+                  Criar
+                </button>
+              </div>
             </div>
 
             {/* Data */}

@@ -58,16 +58,59 @@ class Category(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_type_display()})"
 
+# Choices globais para tipo de transação (reutilizado por Transaction e RecurringTransaction)
+TRANSACTION_TYPE_CHOICES = [
+    ('income', _('Receita')),
+    ('expense', _('Despesa')),
+]
+
+
+class RecurringTransaction(models.Model):
+    FREQUENCY_CHOICES = [
+        ('monthly', _('Mensal')),
+        ('biweekly', _('Quinzenal')),
+        ('weekly', _('Semanal')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='recurrings')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recurrings')
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    type = models.CharField(max_length=10, choices=TRANSACTION_TYPE_CHOICES)
+    category = models.ForeignKey(Category, on_delete=models.PROTECT)
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
+    installments_count = models.PositiveIntegerField(default=1)
+    start_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('Recurring Transaction')
+        verbose_name_plural = _('Recurring Transactions')
+
+    def __str__(self):
+        return f"{self.description} ({self.frequency})"
+
+
+class Investment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='investments')
+    ticker = models.CharField(max_length=20)
+    buy_price = models.DecimalField(max_digits=12, decimal_places=2)
+    quantity = models.DecimalField(max_digits=20, decimal_places=6)
+    buy_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('Investment')
+        verbose_name_plural = _('Investments')
+
+    def __str__(self):
+        return f"{self.ticker} - {self.quantity}"
+
 
 class Transaction(models.Model):
-    """
-    Modelo para transações financeiras.
-    Cada transação pertence a um usuário e tenant específicos.
-    """
-    TRANSACTION_TYPE_CHOICES = [
-        ('income', _('Receita')),
-        ('expense', _('Despesa')),
-    ]
+    """Modelo para transações financeiras. Cada transação pertence a um usuário e tenant específicos."""
     
     STATUS_CHOICES = [
         ('pending', _('Pendente')),
@@ -146,6 +189,10 @@ class Transaction(models.Model):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Criado em'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Atualizado em'))
+    
+    # Link para recorrência/parcelamento
+    recurring = models.ForeignKey(RecurringTransaction, null=True, blank=True, on_delete=models.SET_NULL, related_name='transactions')
+    current_installment = models.PositiveIntegerField(null=True, blank=True)
     
     class Meta:
         verbose_name = _('Transação')

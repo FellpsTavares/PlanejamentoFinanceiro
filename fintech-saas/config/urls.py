@@ -9,7 +9,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import UserViewSet, TenantViewSet, CustomTokenObtainPairView
-from finance.views import CategoryViewSet, TransactionViewSet
+from finance.views import CategoryViewSet, TransactionViewSet, RecurringTransactionViewSet, InvestmentViewSet
 
 # Criar router para ViewSets
 router = DefaultRouter()
@@ -17,6 +17,8 @@ router.register(r'users', UserViewSet, basename='user')
 router.register(r'tenants', TenantViewSet, basename='tenant')
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'transactions', TransactionViewSet, basename='transaction')
+router.register(r'recurrings', RecurringTransactionViewSet, basename='recurring')
+router.register(r'investments', InvestmentViewSet, basename='investment')
 
 urlpatterns = [
     # Admin

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Category, Transaction
+from .models import Category, Transaction, RecurringTransaction, Investment
 from accounts.models import User
 
 
@@ -14,6 +14,13 @@ class CategorySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def create(self, validated_data):
+        # tenant deve ser atribuído pela view (segurança)
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            validated_data['tenant'] = request.user.tenant
+        return super().create(validated_data)
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     """Serializer para Transaction"""
@@ -25,7 +32,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'description', 'amount', 'type', 'category', 'category_name',
             'transaction_date', 'due_date', 'status', 'notes', 'is_recurring',
-            'recurrence_type', 'user_name', 'created_at', 'updated_at'
+            'recurrence_type', 'user_name', 'created_at', 'updated_at',
+            'recurring', 'current_installment'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
@@ -68,7 +76,8 @@ class TransactionCreateUpdateSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = [
             'description', 'amount', 'type', 'category', 'transaction_date',
-            'due_date', 'status', 'notes', 'is_recurring', 'recurrence_type'
+            'due_date', 'status', 'notes', 'is_recurring', 'recurrence_type',
+            'recurring', 'current_installment'
         ]
     
     def validate_amount(self, value):
@@ -94,3 +103,16 @@ class TransactionSummarySerializer(serializers.Serializer):
     by_month = serializers.ListField(
         child=serializers.DictField()
     )
+
+
+class RecurringTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecurringTransaction
+        fields = ['id', 'description', 'amount', 'type', 'category', 'frequency', 'installments_count', 'start_date']
+
+
+class InvestmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Investment
+        fields = ['id', 'ticker', 'buy_price', 'quantity', 'buy_date']
+        read_only_fields = ['id']

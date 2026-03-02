@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import NewTransaction from './pages/NewTransaction';
+import Investments from './pages/Investments';
 
 export default function App() {
   return (
@@ -34,6 +35,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <NewTransaction />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/investments"
+          element={
+            <ProtectedRoute>
+              <Investments />
             </ProtectedRoute>
           }
         />
