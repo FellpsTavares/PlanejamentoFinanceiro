@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     # Local apps
     'accounts.apps.AccountsConfig',
     'finance.apps.FinanceConfig',
+    'transport.apps.TransportConfig',
 ]
 
 MIDDLEWARE = [

@@ -14,6 +14,10 @@ export default function Investments() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
+  const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const formatNumber = (value, minimumFractionDigits = 0, maximumFractionDigits = 4) => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits, maximumFractionDigits });
+  const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
+
   const fetchInvestments = async () => {
     setLoading(true);
     try {
@@ -38,7 +42,7 @@ export default function Investments() {
     try {
       const payload = {
         ticker: ticker.trim().toUpperCase(),
-        buy_price: buyPrice,
+        buy_price: parseMoney(buyPrice),
         quantity: quantity,
         buy_date: buyDate || undefined,
       };
@@ -72,7 +76,10 @@ export default function Investments() {
         </div>
         <div className="w-40">
           <label className="block text-sm text-gray-600">Preço compra</label>
-          <input value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} className="w-full p-2 border rounded" type="number" step="0.01" required />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+            <input value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} className="w-full p-2 border rounded" style={{ paddingLeft: '3rem' }} type="text" placeholder="0,00" required />
+          </div>
         </div>
         <div className="w-40">
           <label className="block text-sm text-gray-600">Quantidade</label>
@@ -104,11 +111,11 @@ export default function Investments() {
             {investments.map((inv) => (
               <tr key={inv.id} className="border-t">
                 <td className="p-3 font-mono">{inv.ticker}</td>
-                <td className="p-3">R$ {Number(inv.buy_price || 0).toFixed(2)}</td>
-                <td className="p-3">{inv.current_price ? `R$ ${Number(inv.current_price).toFixed(2)}` : '—'}</td>
-                <td className="p-3">{inv.quantity}</td>
+                <td className="p-3">{formatBRL(inv.buy_price)}</td>
+                <td className="p-3">{inv.current_price ? formatBRL(inv.current_price) : '—'}</td>
+                <td className="p-3">{formatNumber(inv.quantity, 0, 4)}</td>
                 <td className={`p-3 font-semibold ${inv.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {inv.pnl === null || inv.pnl === undefined ? '—' : `R$ ${Number(inv.pnl).toFixed(2)}`}
+                  {inv.pnl === null || inv.pnl === undefined ? '—' : formatBRL(inv.pnl)}
                 </td>
               </tr>
             ))}

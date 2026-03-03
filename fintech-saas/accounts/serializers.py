@@ -11,7 +11,10 @@ class TenantSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Tenant
-        fields = ['id', 'name', 'slug', 'description', 'email', 'phone', 'is_active', 'created_at']
+        fields = [
+            'id', 'name', 'slug', 'description', 'email', 'phone',
+            'is_active', 'has_module_investments', 'has_module_transport', 'created_at'
+        ]
         read_only_fields = ['id', 'created_at']
 
 
@@ -91,6 +94,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
         token['tenant_id'] = str(user.tenant.id)
         token['tenant_slug'] = user.tenant.slug
+        # Expor flags de módulos no token para o frontend
+        token['has_module_investments'] = bool(getattr(user.tenant, 'has_module_investments', False))
+        token['has_module_transport'] = bool(getattr(user.tenant, 'has_module_transport', False))
         
         return token
     

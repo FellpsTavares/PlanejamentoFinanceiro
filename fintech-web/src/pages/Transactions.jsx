@@ -16,6 +16,8 @@ export default function Transactions() {
   });
   const [categories, setCategories] = useState([]);
 
+  const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -257,7 +259,7 @@ export default function Transactions() {
                       <td className={`px-4 py-3 text-sm font-bold text-right ${
                         transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        {transaction.type === 'income' ? '+' : '-'} R$ {parseFloat(transaction.amount).toFixed(2)}
+                        {transaction.type === 'income' ? '+' : '-'} {formatBRL(transaction.amount)}
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
                         <button

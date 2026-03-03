@@ -1,0 +1,76 @@
+import api from './api';
+
+export const transportService = {
+  getVehicles: async () => {
+    const res = await api.get('/transport/vehicles/');
+    return res.data;
+  },
+  createVehicle: async (payload) => {
+    const res = await api.post('/transport/vehicles/', payload);
+    return res.data;
+  },
+  createRevenue: async (payload) => {
+    const res = await api.post('/transport/revenues/', payload);
+    return res.data;
+  },
+  createExpense: async (payload) => {
+    const res = await api.post('/transport/expenses/', payload);
+    return res.data;
+  },
+  updateRevenue: async (id, payload) => {
+    const res = await api.patch(`/transport/revenues/${id}/`, payload);
+    return res.data;
+  },
+  updateExpense: async (id, payload) => {
+    const res = await api.patch(`/transport/expenses/${id}/`, payload);
+    return res.data;
+  },
+  getRevenues: async (vehicleId) => {
+    const params = {};
+    if (vehicleId) params.vehicle = vehicleId;
+    const res = await api.get('/transport/revenues/', { params });
+    return res.data;
+  },
+  getExpenses: async (vehicleId) => {
+    const params = {};
+    if (vehicleId) params.vehicle = vehicleId;
+    const res = await api.get('/transport/expenses/', { params });
+    return res.data;
+  },
+  getVehicleSummary: async (id, start, end) => {
+    let url = `/transport/vehicles/${id}/summary/`;
+    const params = {};
+    if (start) params.start = start;
+    if (end) params.end = end;
+    const res = await api.get(url, { params });
+    return res.data;
+  },
+  createTrip: async (payload) => {
+    const res = await api.post('/transport/trips/', payload);
+    return res.data;
+  },
+  getTrip: async (id) => {
+    const res = await api.get(`/transport/trips/${id}/`);
+    return res.data;
+  },
+  updateTrip: async (id, payload) => {
+    const res = await api.patch(`/transport/trips/${id}/`, payload);
+    return res.data;
+  },
+  deleteTrip: async (id) => {
+    const res = await api.delete(`/transport/trips/${id}/`);
+    return res.data;
+  },
+  getTrips: async (params) => {
+    const res = await api.get('/transport/trips/', { params });
+    return res.data;
+  },
+  deleteRevenue: async (id) => {
+    const res = await api.delete(`/transport/revenues/${id}/`);
+    return res.data;
+  },
+  deleteExpense: async (id) => {
+    const res = await api.delete(`/transport/expenses/${id}/`);
+    return res.data;
+  },
+};

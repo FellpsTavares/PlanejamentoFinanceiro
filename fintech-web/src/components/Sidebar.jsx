@@ -1,9 +1,25 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSidebar } from '../hooks/useSidebar.jsx';
+import { authService } from '../services/auth';
 
 export default function Sidebar() {
   const { open, toggle, close } = useSidebar();
+  const [user, setUser] = useState(() => authService.getCurrentUser());
+
+  useEffect(() => {
+    const onChange = () => setUser(authService.getCurrentUser());
+    window.addEventListener('auth:userChanged', onChange);
+    // também escutar storage para mudanças vindas de outra aba
+    const onStorage = (e) => {
+      if (e.key === 'user' || e.key === 'access_token') onChange();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('auth:userChanged', onChange);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   return (
     <>
@@ -26,6 +42,15 @@ export default function Sidebar() {
           <Link to="/transactions" onClick={close} className="p-2 hover:bg-gray-100 rounded">Transações</Link>
           <Link to="/transactions/new" onClick={close} className="p-2 hover:bg-gray-100 rounded">Nova Transação</Link>
           <Link to="/investments" onClick={close} className="p-2 hover:bg-gray-100 rounded">Investimentos</Link>
+          {/* Mostrar Transportadora somente se o tenant tiver o módulo ativo */}
+          {user?.tenant?.has_module_transport && (
+            <>
+              <hr className="my-2" />
+              <Link to="/transport/dashboard" onClick={close} className="p-2 hover:bg-gray-100 rounded">Transportadora</Link>
+              <Link to="/transport/vehicles" onClick={close} className="p-2 hover:bg-gray-100 rounded">Veículos</Link>
+              <Link to="/transport/trips/new" onClick={close} className="p-2 hover:bg-gray-100 rounded">Nova Viagem</Link>
+            </>
+          )}
         </nav>
       </aside>
     </>

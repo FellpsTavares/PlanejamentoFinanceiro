@@ -23,6 +23,9 @@ class Tenant(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_('Ativo'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Criado em'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Atualizado em'))
+    # Módulos ativados para este tenant (feature flags)
+    has_module_investments = models.BooleanField(default=False, verbose_name=_('Módulo Investimentos'))
+    has_module_transport = models.BooleanField(default=False, verbose_name=_('Módulo Transportadora'))
     
     class Meta:
         verbose_name = _('Tenant')

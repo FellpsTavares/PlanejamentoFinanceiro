@@ -10,6 +10,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -85,7 +87,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-gray-600 text-sm">Receitas</p>
                   <p className="text-2xl font-bold text-green-600">
-                    R$ {parseFloat(summary.total_income).toFixed(2)}
+                    {formatBRL(summary.total_income)}
                   </p>
                 </div>
                 <div className="text-4xl">📈</div>
@@ -98,7 +100,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-gray-600 text-sm">Despesas</p>
                   <p className="text-2xl font-bold text-red-600">
-                    R$ {parseFloat(summary.total_expense).toFixed(2)}
+                    {formatBRL(summary.total_expense)}
                   </p>
                 </div>
                 <div className="text-4xl">📉</div>
@@ -111,7 +113,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-gray-600 text-sm">Saldo</p>
                   <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    R$ {parseFloat(summary.balance).toFixed(2)}
+                    {formatBRL(summary.balance)}
                   </p>
                 </div>
                 <div className="text-4xl">💰</div>
@@ -134,7 +136,7 @@ export default function Dashboard() {
                       <p className="text-sm text-gray-600">{category.type === 'income' ? 'Receita' : 'Despesa'}</p>
                     </div>
                   </div>
-                  <p className="font-bold text-gray-900">R$ {parseFloat(category.total).toFixed(2)}</p>
+                  <p className="font-bold text-gray-900">{formatBRL(category.total)}</p>
                 </div>
               ))}
             </div>

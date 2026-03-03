@@ -19,6 +19,7 @@ router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'transactions', TransactionViewSet, basename='transaction')
 router.register(r'recurrings', RecurringTransactionViewSet, basename='recurring')
 router.register(r'investments', InvestmentViewSet, basename='investment')
+from django.urls import re_path
 
 urlpatterns = [
     # Admin
@@ -33,4 +34,6 @@ urlpatterns = [
     
     # API Auth
     path('api/auth/', include('rest_framework.urls')),
+    # Transporte (módulo separado)
+    path('api/transport/', include('transport.urls')),
 ]

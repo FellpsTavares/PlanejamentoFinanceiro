@@ -18,6 +18,8 @@ export default function NewTransaction() {
     notes: '',
   });
 
+  const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
+
   useEffect(() => {
     loadCategories();
   }, []);
@@ -74,7 +76,7 @@ export default function NewTransaction() {
       // Criar transação
       await transactionService.create({
         description: formData.description,
-        amount: parseFloat(formData.amount),
+        amount: parseMoney(formData.amount),
         type: formData.type,
         category: formData.category,
         transaction_date: formData.transaction_date,
@@ -168,17 +170,19 @@ export default function NewTransaction() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Valor (R$) *
               </label>
-              <input
-                type="number"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
-                className="input-field"
-                placeholder="0.00"
-                step="0.01"
-                min="0"
-                required
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                <input
+                  type="text"
+                  name="amount"
+                  value={formData.amount}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ paddingLeft: '3rem' }}
+                  placeholder="0,00"
+                  required
+                />
+              </div>
             </div>
 
             {/* Categoria */}
