@@ -82,6 +82,12 @@ export const authService = {
           if (payload.has_module_investments !== undefined) {
             user.tenant.has_module_investments = Boolean(payload.has_module_investments);
           }
+          if (payload.is_platform_admin !== undefined) {
+            user.is_platform_admin = Boolean(payload.is_platform_admin);
+          }
+          if (payload.role !== undefined) {
+            user.role = payload.role;
+          }
         }
       }
     } catch (e) {

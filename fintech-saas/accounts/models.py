@@ -50,12 +50,23 @@ class User(AbstractUser):
     )
     
     # Informações adicionais
+    ROLE_ADMIN = 'admin'
+    ROLE_MANAGER = 'manager'
+    ROLE_OPERATOR = 'operator'
+    ROLE_CHOICES = (
+        (ROLE_ADMIN, _('Admin')),
+        (ROLE_MANAGER, _('Gerente')),
+        (ROLE_OPERATOR, _('Operador')),
+    )
+
     phone = models.CharField(max_length=20, blank=True, verbose_name=_('Telefone'))
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, verbose_name=_('Avatar'))
     bio = models.TextField(blank=True, verbose_name=_('Biografia'))
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default=ROLE_OPERATOR, verbose_name=_('Papel'))
     
     # Configurações
     is_verified = models.BooleanField(default=False, verbose_name=_('Email Verificado'))
+    is_platform_admin = models.BooleanField(default=False, verbose_name=_('Admin da Plataforma'))
     preferred_currency = models.CharField(
         max_length=3,
         default='BRL',
@@ -80,3 +91,33 @@ class User(AbstractUser):
         if not self.username:
             self.username = self.email.split('@')[0]
         super().save(*args, **kwargs)
+
+    @property
+    def is_tenant_admin(self):
+        return self.role == self.ROLE_ADMIN
+
+
+class TenantParameter(models.Model):
+    MODULE_TRANSPORT = 'transport'
+    MODULE_INVESTMENTS = 'investments'
+    MODULE_CHOICES = (
+        (MODULE_TRANSPORT, _('Transportadora')),
+        (MODULE_INVESTMENTS, _('Investimentos')),
+    )
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='parameters')
+    module = models.CharField(max_length=32, choices=MODULE_CHOICES)
+    key = models.CharField(max_length=100)
+    value = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('Parâmetro do Tenant')
+        verbose_name_plural = _('Parâmetros do Tenant')
+        unique_together = ('tenant', 'module', 'key')
+        ordering = ['module', 'key']
+
+    def __str__(self):
+        return f"{self.tenant.slug} | {self.module} | {self.key}={self.value}"

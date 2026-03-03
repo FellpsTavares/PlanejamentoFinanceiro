@@ -12,7 +12,7 @@ export default function ProtectedRoute({ children }) {
   return (
     <SidebarProvider>
       <Sidebar />
-      <div className="md:pl-64">{children}</div>
+      <div className="pl-16">{children}</div>
     </SidebarProvider>
   );
 }

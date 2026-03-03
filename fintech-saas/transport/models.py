@@ -102,6 +102,11 @@ class Trip(models.Model):
 
     total_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_received = models.BooleanField(default=False)
+    base_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    fuel_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    initial_km = models.PositiveIntegerField(null=True, blank=True)
+    final_km = models.PositiveIntegerField(null=True, blank=True)
+    driver_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

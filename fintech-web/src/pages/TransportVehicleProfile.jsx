@@ -148,6 +148,12 @@ export default function TransportVehicleProfile() {
                 <div className="text-sm text-gray-600">
                   {t.is_received ? 'Recebida' : 'Não recebida'} • Gastos: {formatBRL(t.expense_value)}
                 </div>
+                <div className="text-sm text-gray-600">
+                  Outros: {formatBRL(t.base_expense_value)} • Combustível: {formatBRL(t.fuel_expense_value)} • Motorista: {formatBRL(t.driver_payment)}
+                </div>
+                <div className="text-sm text-gray-600">
+                  KM inicial: {t.initial_km ?? '—'} • KM final: {t.final_km ?? '—'}
+                </div>
                 {t.description && <div className="text-sm text-gray-500">{t.description}</div>}
               </div>
               <div className="flex items-center gap-3">

@@ -8,12 +8,16 @@ import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import NewTransaction from './pages/NewTransaction';
 import Investments from './pages/Investments';
+import InvestmentsDashboard from './pages/InvestmentsDashboard';
 import ModuleRoute from './components/ModuleRoute';
+import PlatformAdminRoute from './components/PlatformAdminRoute';
 import TransportDashboard from './pages/TransportDashboard';
 import TransportVehicles from './pages/TransportVehicles';
 import TransportVehicleProfile from './pages/TransportVehicleProfile';
 import TransportVehicleNew from './pages/TransportVehicleNew';
 import TransportTripNew from './pages/TransportTripNew';
+import AdminTenants from './pages/AdminTenants';
+import ModuleSettings from './pages/ModuleSettings';
 
 export default function App() {
   useEffect(() => {
@@ -58,7 +62,37 @@ export default function App() {
           path="/investments"
           element={
             <ProtectedRoute>
-              <Investments />
+              <ModuleRoute moduleFlag="has_module_investments">
+                <Investments />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/investments/dashboard"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_investments">
+                <InvestmentsDashboard />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/tenants"
+          element={
+            <ProtectedRoute>
+              <PlatformAdminRoute>
+                <AdminTenants />
+              </PlatformAdminRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings/modules"
+          element={
+            <ProtectedRoute>
+              <ModuleSettings />
             </ProtectedRoute>
           }
         />

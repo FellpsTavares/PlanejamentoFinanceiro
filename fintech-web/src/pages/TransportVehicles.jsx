@@ -104,11 +104,11 @@ export default function TransportVehicles() {
                 <div className="font-semibold">{v.plate} — {v.model}</div>
                 <div className="text-sm text-gray-600">Ano: {v.year} • Capacidade: {v.capacity}</div>
               </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => openModal('entry', v)} className="text-green-600 hover:underline">Entrada</button>
-                <button onClick={() => openModal('exit', v)} className="text-red-600 hover:underline">Saída</button>
-                <Link to={`/transport/trips/new?vehicle=${v.id}`} className="text-indigo-600">Viagem</Link>
-                <Link to={`/transport/vehicles/${v.id}`} className="text-blue-600">Abrir</Link>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <button onClick={() => openModal('entry', v)} className="btn btn-sm bg-green-100 text-green-700 border-green-200 hover:bg-green-200">Entrada</button>
+                <button onClick={() => openModal('exit', v)} className="btn btn-sm btn-danger">Saída</button>
+                <Link to={`/transport/trips/new?vehicle=${v.id}`} className="btn btn-sm btn-secondary">Viagem</Link>
+                <Link to={`/transport/vehicles/${v.id}`} className="btn btn-sm btn-primary">Abrir</Link>
               </div>
             </div>
           </li>
