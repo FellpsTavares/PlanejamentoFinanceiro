@@ -11,7 +11,7 @@ export default function AppHeader() {
   };
 
   const handleHome = () => {
-    navigate('/dashboard');
+    navigate('/home');
   };
 
   const handleLogout = () => {
@@ -22,6 +22,7 @@ export default function AppHeader() {
   const titleByPath = () => {
     if (location.pathname.startsWith('/transport')) return 'Transportadora';
     if (location.pathname.startsWith('/investments')) return 'Investimentos';
+    if (location.pathname.startsWith('/home')) return 'Home';
     if (location.pathname.startsWith('/transactions/new')) return 'Nova Transação';
     if (location.pathname.startsWith('/transactions')) return 'Transações';
     if (location.pathname.startsWith('/settings')) return 'Configurações';

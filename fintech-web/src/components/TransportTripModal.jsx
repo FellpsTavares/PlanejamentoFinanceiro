@@ -9,7 +9,10 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
   const [ratePerTon, setRatePerTon] = useState('');
   const [days, setDays] = useState('');
   const [dailyRate, setDailyRate] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState('');
+  const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
+  const [progressType, setProgressType] = useState('');
   const [description, setDescription] = useState('');
   const [isReceived, setIsReceived] = useState(false);
   const [baseExpenseValue, setBaseExpenseValue] = useState('0');
@@ -33,6 +36,11 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         setDriverReceiveType(String(map.TIPO_RECEBIMENTO_MOTORISTA || '1'));
         setDriverPct(String(map.PORCENTAGEM_MOTORISTA || '10'));
         setDriverPctType(String(map.TIPO_PORCENTAGEM || 'bruta'));
+        const progressOptions = String(map.TRIP_PROGRESS_TYPES || 'Coleta,Em trânsito,Descarga,Retorno')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (progressOptions.length > 0) setProgressTypeOptions(progressOptions);
       } catch (err) {
         console.error('Erro ao carregar parâmetros de transport', err);
       }
@@ -43,7 +51,9 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         setRatePerTon(initial.rate_per_ton != null ? String(initial.rate_per_ton) : '');
         setDays(initial.days != null ? String(initial.days) : '');
         setDailyRate(initial.daily_rate != null ? String(initial.daily_rate) : '');
-        setDate(initial.date || new Date().toISOString().slice(0, 10));
+        setStartDate(initial.start_date || initial.date || new Date().toISOString().slice(0, 10));
+        setEndDate(initial.end_date || '');
+        setProgressType(initial.progress_type || '');
         setDescription(initial.description || '');
         setIsReceived(Boolean(initial.is_received));
         setBaseExpenseValue(initial.base_expense_value != null ? String(initial.base_expense_value) : '0');
@@ -57,7 +67,9 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         setRatePerTon('');
         setDays('');
         setDailyRate('');
-        setDate(new Date().toISOString().slice(0, 10));
+        setStartDate(new Date().toISOString().slice(0, 10));
+        setEndDate('');
+        setProgressType('');
         setDescription('');
         setIsReceived(false);
         setBaseExpenseValue('0');
@@ -101,8 +113,11 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
       setSaving(true);
       const payload = {
         vehicle: vehicleId,
-        date,
+        date: startDate,
+        start_date: startDate,
+        end_date: endDate || null,
         modality,
+        progress_type: progressType,
         description,
         is_received: isReceived,
         base_expense_value: parseMoney(baseExpenseValue || 0),
@@ -188,9 +203,24 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium">Data</label>
-            <input type="date" className="input-field w-full" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium">Data início</label>
+              <input type="date" className="input-field w-full" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Data fim</label>
+              <input type="date" className="input-field w-full" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Andamento da viagem</label>
+              <select className="input-field w-full" value={progressType} onChange={(e) => setProgressType(e.target.value)}>
+                <option value="">Selecione...</option>
+                {progressTypeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

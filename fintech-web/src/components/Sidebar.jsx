@@ -43,6 +43,7 @@ export default function Sidebar() {
         active: location.pathname.startsWith('/transport'),
         items: [
           { to: '/transport/dashboard', label: 'Dashboard' },
+          { to: '/transport/trips', label: 'Gerenciar Viagens' },
           { to: '/transport/vehicles', label: 'Veículos' },
           { to: '/transport/trips/new', label: 'Nova Viagem' },
         ],

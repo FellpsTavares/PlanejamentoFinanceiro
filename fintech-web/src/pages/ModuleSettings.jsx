@@ -110,6 +110,7 @@ export default function ModuleSettings() {
   const [tipoRecebimento, setTipoRecebimento] = useState('1');
   const [porcentagem, setPorcentagem] = useState('10');
   const [tipoPorcentagem, setTipoPorcentagem] = useState('bruta');
+  const [tripProgressTypes, setTripProgressTypes] = useState('Coleta,Em trânsito,Descarga,Retorno');
 
   const toggleSection = (key) => {
     setSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -213,6 +214,7 @@ export default function ModuleSettings() {
           setTipoRecebimento(String(map.TIPO_RECEBIMENTO_MOTORISTA || '1'));
           setPorcentagem(String(map.PORCENTAGEM_MOTORISTA || '10'));
           setTipoPorcentagem(String(map.TIPO_PORCENTAGEM || 'bruta'));
+          setTripProgressTypes(String(map.TRIP_PROGRESS_TYPES || 'Coleta,Em trânsito,Descarga,Retorno'));
         }
       } catch (err) {
         const detail = err?.response?.data?.detail || err?.response?.data?.module?.[0] || 'Erro ao carregar configurações do módulo';
@@ -233,6 +235,7 @@ export default function ModuleSettings() {
         { key: 'TIPO_RECEBIMENTO_MOTORISTA', value: String(tipoRecebimento) },
         { key: 'PORCENTAGEM_MOTORISTA', value: String(porcentagem || '0') },
         { key: 'TIPO_PORCENTAGEM', value: String(tipoPorcentagem) },
+        { key: 'TRIP_PROGRESS_TYPES', value: String(tripProgressTypes || '') },
       ]);
       toast('Configurações salvas', 'success');
     } catch (err) {
@@ -961,6 +964,18 @@ export default function ModuleSettings() {
                 <option value="liquida">Líquida (valor da viagem - gastos base)</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium">Tipos de andamento da viagem</label>
+            <input
+              className="input-field w-full"
+              value={tripProgressTypes}
+              onChange={(e) => setTripProgressTypes(e.target.value)}
+              disabled={!canEdit || saving}
+              placeholder="Ex: Coleta,Em trânsito,Descarga,Retorno"
+            />
+            <p className="text-xs text-gray-500 mt-1">Separe por vírgula os tipos disponíveis para seleção durante a viagem.</p>
           </div>
 
           <div className="pt-2">

@@ -269,6 +269,7 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
                 'TIPO_RECEBIMENTO_MOTORISTA': '1',
                 'PORCENTAGEM_MOTORISTA': '10',
                 'TIPO_PORCENTAGEM': 'bruta',
+                'TRIP_PROGRESS_TYPES': 'Coleta,Em trânsito,Descarga,Retorno',
             }
         elif module == TenantParameter.MODULE_GENERAL:
             defaults = {

@@ -4,6 +4,7 @@ import { authService } from './services/auth';
 import ProtectedRoute from './components/ProtectedRoute';
 import ToastContainer from './components/ToastContainer';
 import Login from './pages/Login';
+import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import NewTransaction from './pages/NewTransaction';
@@ -16,6 +17,7 @@ import TransportVehicles from './pages/TransportVehicles';
 import TransportVehicleProfile from './pages/TransportVehicleProfile';
 import TransportVehicleNew from './pages/TransportVehicleNew';
 import TransportTripNew from './pages/TransportTripNew';
+import TransportTrips from './pages/TransportTrips';
 import AdminTenants from './pages/AdminTenants';
 import ModuleSettings from './pages/ModuleSettings';
 
@@ -34,6 +36,14 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         {/* Rotas Protegidas */}
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
@@ -129,6 +139,16 @@ export default function App() {
           }
         />
         <Route
+          path="/transport/trips"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportTrips />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/transport/trips/new"
           element={
             <ProtectedRoute>
@@ -150,8 +170,8 @@ export default function App() {
         />
 
         {/* Rota padrão */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="*" element={<Navigate to="/home" replace />} />
       </Routes>
     </Router>
   );

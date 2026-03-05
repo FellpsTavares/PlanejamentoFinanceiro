@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.utils.translation import gettext_lazy as _
 
 
@@ -83,6 +84,11 @@ class FuelLog(models.Model):
 
 
 class Trip(models.Model):
+    STATUS_CHOICES = (
+        ('in_progress', 'Em curso'),
+        ('completed', 'Encerrada'),
+    )
+
     MODALITY_CHOICES = (
         ('per_ton', 'Por Tonelada'),
         ('lease', 'Arrendamento (diárias)'),
@@ -90,7 +96,10 @@ class Trip(models.Model):
 
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='trips')
     date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
     modality = models.CharField(max_length=32, choices=MODALITY_CHOICES)
+    progress_type = models.CharField(max_length=100, blank=True, default='')
 
     # fields for per_ton
     tons = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
@@ -106,6 +115,7 @@ class Trip(models.Model):
     fuel_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     initial_km = models.PositiveIntegerField(null=True, blank=True)
     final_km = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
     driver_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     description = models.TextField(blank=True)
@@ -117,3 +127,42 @@ class Trip(models.Model):
 
     def __str__(self):
         return f"{self.vehicle} - {self.modality} - {self.total_value} ({self.date})"
+
+    def recalculate_from_movements(self):
+        revenue_sum = self.movements.filter(movement_type='revenue').aggregate(total=Sum('amount'))['total'] or 0
+        other_expense_sum = self.movements.filter(movement_type='expense', expense_category='other').aggregate(total=Sum('amount'))['total'] or 0
+        fuel_expense_sum = self.movements.filter(movement_type='expense', expense_category='fuel').aggregate(total=Sum('amount'))['total'] or 0
+
+        self.is_received = bool(revenue_sum > 0)
+        self.base_expense_value = other_expense_sum
+        self.fuel_expense_value = fuel_expense_sum
+        self.expense_value = (self.base_expense_value or 0) + (self.fuel_expense_value or 0) + (self.driver_payment or 0)
+        self.save(update_fields=['is_received', 'base_expense_value', 'fuel_expense_value', 'expense_value'])
+
+
+class TripMovement(models.Model):
+    MOVEMENT_TYPE_CHOICES = (
+        ('expense', 'Gasto'),
+        ('revenue', 'Recebimento'),
+    )
+
+    EXPENSE_CATEGORY_CHOICES = (
+        ('fuel', 'Combustível'),
+        ('other', 'Outros gastos'),
+    )
+
+    trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='movements')
+    date = models.DateField()
+    movement_type = models.CharField(max_length=20, choices=MOVEMENT_TYPE_CHOICES)
+    expense_category = models.CharField(max_length=20, choices=EXPENSE_CATEGORY_CHOICES, blank=True, default='')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('Lançamento da Viagem')
+        verbose_name_plural = _('Lançamentos da Viagem')
+        ordering = ['-date', '-id']
+
+    def __str__(self):
+        return f"{self.trip_id} | {self.movement_type} | {self.amount}"

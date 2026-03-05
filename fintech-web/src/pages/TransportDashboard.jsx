@@ -62,6 +62,7 @@ export default function TransportDashboard() {
 
       <div className="mt-4 flex gap-2">
         <Link to="/transport/vehicles" className="btn btn-secondary">Ver Veículos</Link>
+        <Link to="/transport/trips" className="btn btn-secondary">Gerenciar Viagens</Link>
         <Link to="/transport/trips/new" className="btn btn-primary">Nova Viagem</Link>
       </div>
 
@@ -96,11 +97,14 @@ export default function TransportDashboard() {
           {recentTrips.map((trip) => (
             <li key={trip.id} className="p-3 border rounded flex justify-between items-center">
               <div>
-                <div className="font-semibold">{trip.date ? new Date(trip.date).toLocaleDateString('pt-BR') : ''}</div>
-                <div className="text-sm text-gray-600">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'} • {trip.is_received ? 'Recebida' : 'Não recebida'}</div>
+                <div className="font-semibold">{trip.start_date ? new Date(trip.start_date).toLocaleDateString('pt-BR') : (trip.date ? new Date(trip.date).toLocaleDateString('pt-BR') : '')}</div>
+                <div className="text-sm text-gray-600">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'} • {trip.progress_type || 'Sem andamento'}</div>
                 <div className="text-xs text-gray-500">Gastos: {formatBRL(trip.expense_value)}</div>
               </div>
-              <div className="font-semibold">{formatBRL(trip.total_value)}</div>
+              <div className="flex items-center gap-3">
+                <div className="font-semibold">{formatBRL(trip.total_value)}</div>
+                <Link to={`/transport/trips?trip=${trip.id}`} className="btn btn-secondary btn-sm">Editar viagem</Link>
+              </div>
             </li>
           ))}
         </ul>

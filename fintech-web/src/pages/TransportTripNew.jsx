@@ -19,7 +19,10 @@ export default function TransportTripNew() {
   const [ratePerTon, setRatePerTon] = useState('');
   const [days, setDays] = useState('');
   const [dailyRate, setDailyRate] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState('');
+  const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
+  const [progressType, setProgressType] = useState('');
   const [description, setDescription] = useState('');
   const [isReceived, setIsReceived] = useState(false);
   const [baseExpenseValue, setBaseExpenseValue] = useState('0');
@@ -46,11 +49,18 @@ export default function TransportTripNew() {
         setDriverReceiveType(String(map.TIPO_RECEBIMENTO_MOTORISTA || '1'));
         setDriverPct(String(map.PORCENTAGEM_MOTORISTA || '10'));
         setDriverPctType(String(map.TIPO_PORCENTAGEM || 'bruta'));
+        const progressOptions = String(map.TRIP_PROGRESS_TYPES || 'Coleta,Em trânsito,Descarga,Retorno')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (progressOptions.length > 0) setProgressTypeOptions(progressOptions);
 
         if (tripId) {
           const trip = await transportService.getTrip(tripId);
           setVehicleId(String(trip.vehicle || ''));
-          setDate(trip.date || new Date().toISOString().slice(0, 10));
+          setStartDate(trip.start_date || trip.date || new Date().toISOString().slice(0, 10));
+          setEndDate(trip.end_date || '');
+          setProgressType(trip.progress_type || '');
           setModality(trip.modality || 'per_ton');
           setTons(trip.tons != null ? String(trip.tons) : '');
           setRatePerTon(trip.rate_per_ton != null ? String(trip.rate_per_ton) : '');
@@ -123,8 +133,11 @@ export default function TransportTripNew() {
     }
     const payload = {
       vehicle: vehicleId,
-      date,
+      date: startDate,
+      start_date: startDate,
+      end_date: endDate || null,
       modality,
+      progress_type: progressType,
       description,
       is_received: isReceived,
       base_expense_value: parseMoney(baseExpenseValue || 0),
@@ -185,8 +198,8 @@ export default function TransportTripNew() {
 
   return (
     <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-bold mb-4">Nova Viagem</h1>
-      {tripId && <p className="text-sm text-gray-600 mb-3">Modo edição de viagem</p>}
+      <h1 className="text-2xl font-bold mb-4">Cadastro de Viagem</h1>
+      {tripId && <p className="text-sm text-gray-600 mb-3">Modo edição completa da viagem</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium">Veículo</label>
@@ -238,9 +251,24 @@ export default function TransportTripNew() {
           </div>
         )}
 
-        <div>
-          <label className="block text-sm font-medium">Data</label>
-          <input type="date" className="input-field" value={date} onChange={e => setDate(e.target.value)} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium">Data início</label>
+            <input type="date" className="input-field" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Data fim</label>
+            <input type="date" className="input-field" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">Andamento da viagem</label>
+            <select className="input-field" value={progressType} onChange={e => setProgressType(e.target.value)}>
+              <option value="">Selecione...</option>
+              {progressTypeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div>

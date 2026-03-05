@@ -53,6 +53,22 @@ export const transportService = {
     const res = await api.get(`/transport/trips/${id}/`);
     return res.data;
   },
+  getTripMovements: async (id) => {
+    const res = await api.get(`/transport/trips/${id}/movements/`);
+    return res.data;
+  },
+  createTripMovement: async (id, payload) => {
+    const res = await api.post(`/transport/trips/${id}/movements/`, payload);
+    return res.data;
+  },
+  updateTripMovement: async (tripId, movementId, payload) => {
+    const res = await api.patch(`/transport/trips/${tripId}/movements/${movementId}/`, payload);
+    return res.data;
+  },
+  deleteTripMovement: async (tripId, movementId) => {
+    const res = await api.delete(`/transport/trips/${tripId}/movements/${movementId}/`);
+    return res.data;
+  },
   updateTrip: async (id, payload) => {
     const res = await api.patch(`/transport/trips/${id}/`, payload);
     return res.data;

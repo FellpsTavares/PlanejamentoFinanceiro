@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_date
 
 from .models import Vehicle, TransportRevenue, TransportExpense
 from .models import Trip
-from .serializers import VehicleSerializer, TransportRevenueSerializer, TransportExpenseSerializer, TripSerializer
+from .serializers import VehicleSerializer, TransportRevenueSerializer, TransportExpenseSerializer, TripSerializer, TripMovementSerializer
 from .permissions import HasTransportModule
 
 
@@ -119,7 +119,7 @@ class TripViewSet(viewsets.ModelViewSet):
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
     permission_classes = [IsAuthenticated, HasTransportModule]
-    filterset_fields = ['vehicle', 'modality', 'date']
+    filterset_fields = ['vehicle', 'modality', 'date', 'status', 'is_received']
 
     def get_queryset(self):
         user = self.request.user
@@ -135,3 +135,35 @@ class TripViewSet(viewsets.ModelViewSet):
         if not vehicle or vehicle.tenant != user_tenant:
             raise serializers.ValidationError({'vehicle': 'Veículo inválido ou não pertence ao tenant do usuário.'})
         serializer.save()
+
+    @action(detail=True, methods=['get', 'post'], url_path='movements')
+    def movements(self, request, pk=None):
+        trip = self.get_object()
+
+        if request.method.lower() == 'get':
+            serializer = TripMovementSerializer(trip.movements.all(), many=True)
+            return Response(serializer.data)
+
+        serializer = TripMovementSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(trip=trip)
+        trip.recalculate_from_movements()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'movements/(?P<movement_id>[^/.]+)')
+    def movement_detail(self, request, pk=None, movement_id=None):
+        trip = self.get_object()
+        movement = trip.movements.filter(id=movement_id).first()
+        if not movement:
+            return Response({'detail': 'Lançamento não encontrado para esta viagem.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method.lower() == 'delete':
+            movement.delete()
+            trip.recalculate_from_movements()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = TripMovementSerializer(movement, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        trip.recalculate_from_movements()
+        return Response(serializer.data)
