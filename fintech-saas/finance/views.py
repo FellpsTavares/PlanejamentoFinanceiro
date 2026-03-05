@@ -4,10 +4,15 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
+from django.http import HttpResponse
+from django.utils.dateparse import parse_date
+from io import BytesIO
+from decimal import Decimal
 from datetime import datetime, timedelta
 from accounts.audit import log_tenant_action
 from .models import Category, Transaction, RecurringTransaction, Investment
 from .services.brapi_service import get_current_price
+from transport.models import Vehicle, Trip, TransportRevenue, TransportExpense
 from .serializers import (
     CategorySerializer, TransactionSerializer,
     TransactionListSerializer, TransactionCreateUpdateSerializer,
@@ -299,3 +304,326 @@ class InvestmentViewSet(viewsets.ModelViewSet):
         
         serializer = TransactionListSerializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class ReportViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def _build_pdf(self, title, subtitle, summary_items, columns, rows):
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        y = height - 50
+
+        pdf.setFont('Helvetica-Bold', 16)
+        pdf.drawString(40, y, title)
+        y -= 20
+
+        pdf.setFont('Helvetica', 9)
+        pdf.drawString(40, y, subtitle)
+        y -= 24
+
+        pdf.setFont('Helvetica-Bold', 11)
+        pdf.drawString(40, y, 'Resumo Executivo')
+        y -= 16
+
+        pdf.setFont('Helvetica', 9)
+        for item in summary_items:
+            pdf.drawString(48, y, f"• {item}")
+            y -= 14
+
+        y -= 6
+        pdf.setFont('Helvetica-Bold', 11)
+        pdf.drawString(40, y, 'Detalhamento')
+        y -= 16
+
+        col_width = (width - 80) / max(1, len(columns))
+        pdf.setFont('Helvetica-Bold', 8)
+        for idx, col in enumerate(columns):
+            pdf.drawString(40 + idx * col_width, y, str(col)[:28])
+        y -= 12
+        pdf.line(40, y, width - 40, y)
+        y -= 12
+
+        pdf.setFont('Helvetica', 8)
+        for row in rows:
+            if y < 60:
+                pdf.showPage()
+                y = height - 50
+                pdf.setFont('Helvetica-Bold', 8)
+                for idx, col in enumerate(columns):
+                    pdf.drawString(40 + idx * col_width, y, str(col)[:28])
+                y -= 12
+                pdf.line(40, y, width - 40, y)
+                y -= 12
+                pdf.setFont('Helvetica', 8)
+
+            for idx, col in enumerate(row):
+                pdf.drawString(40 + idx * col_width, y, str(col)[:28])
+            y -= 12
+
+        pdf.save()
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    @action(detail=False, methods=['get'], url_path='finance-pdf')
+    def finance_pdf(self, request):
+        tenant = request.user.tenant
+        user = request.user
+        qs = Transaction.objects.filter(tenant=tenant, user=user)
+
+        start_date = parse_date(request.query_params.get('start_date') or '')
+        end_date = parse_date(request.query_params.get('end_date') or '')
+        if start_date:
+            qs = qs.filter(transaction_date__gte=start_date)
+        if end_date:
+            qs = qs.filter(transaction_date__lte=end_date)
+
+        order_by = (request.query_params.get('order_by') or '').strip()
+        order_dir = (request.query_params.get('order_dir') or 'desc').strip().lower()
+        allowed_order = {'transaction_date', 'amount', 'created_at', 'status', 'type'}
+        if order_by in allowed_order:
+            prefix = '-' if order_dir == 'desc' else ''
+            qs = qs.order_by(f'{prefix}{order_by}')
+        else:
+            qs = qs.order_by('-transaction_date', '-created_at')
+
+        fields_param = (request.query_params.get('fields') or '').strip()
+        field_specs = {
+            'transaction_date': ('Data', lambda tx: tx.transaction_date.strftime('%d/%m/%Y') if tx.transaction_date else ''),
+            'description': ('Descrição', lambda tx: tx.description),
+            'category': ('Categoria', lambda tx: tx.category.name if tx.category else 'Sem categoria'),
+            'type': ('Tipo', lambda tx: 'Receita' if tx.type == 'income' else 'Despesa'),
+            'amount': ('Valor', lambda tx: f"R$ {float(tx.amount):.2f}"),
+            'status': ('Status', lambda tx: tx.status),
+        }
+        selected_fields = [f for f in fields_param.split(',') if f in field_specs] if fields_param else []
+        if not selected_fields:
+            selected_fields = ['transaction_date', 'description', 'category', 'type', 'amount', 'status']
+
+        income = qs.filter(type='income').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        expense = qs.filter(type='expense').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        balance = income - expense
+
+        by_category = (
+            qs.values('category__name', 'type')
+            .annotate(total=Sum('amount'))
+            .order_by('-total')[:8]
+        )
+
+        category_lines = [
+            f"{item['category__name'] or 'Sem categoria'} ({'Receita' if item['type'] == 'income' else 'Despesa'}): R$ {float(item['total']):.2f}"
+            for item in by_category
+        ]
+
+        recent = qs.select_related('category')[:25]
+        rows = [
+            [field_specs[field][1](tx) for field in selected_fields]
+            for tx in recent
+        ]
+
+        summary = [
+            f"Total de receitas: R$ {float(income):.2f}",
+            f"Total de despesas: R$ {float(expense):.2f}",
+            f"Saldo: R$ {float(balance):.2f}",
+            f"Transações no período: {qs.count()}",
+        ] + category_lines[:4]
+
+        pdf_bytes = self._build_pdf(
+            title='Relatório Financeiro',
+            subtitle=f"Tenant: {tenant.name} | Usuário: {user.email} | Período: {start_date or '-'} até {end_date or '-'}",
+            summary_items=summary,
+            columns=[field_specs[field][0] for field in selected_fields],
+            rows=rows,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="relatorio_financeiro.pdf"'
+        return response
+
+    @action(detail=False, methods=['get'], url_path='transport-pdf')
+    def transport_pdf(self, request):
+        tenant = request.user.tenant
+        if not getattr(tenant, 'has_module_transport', False):
+            return Response({'detail': 'Módulo transport não habilitado para este tenant.'}, status=status.HTTP_403_FORBIDDEN)
+
+        start_date = parse_date(request.query_params.get('start_date') or '')
+        end_date = parse_date(request.query_params.get('end_date') or '')
+        vehicle_id = (request.query_params.get('vehicle_id') or '').strip()
+        status_param = (request.query_params.get('status') or '').strip()
+
+        vehicles_count = Vehicle.objects.filter(tenant=tenant).count()
+        trips = Trip.objects.filter(vehicle__tenant=tenant).select_related('vehicle').order_by('-start_date', '-date', '-id')
+
+        if vehicle_id:
+            trips = trips.filter(vehicle_id=vehicle_id)
+        if status_param in ['in_progress', 'completed']:
+            trips = trips.filter(status=status_param)
+        if start_date:
+            trips = trips.filter(Q(start_date__gte=start_date) | Q(start_date__isnull=True, date__gte=start_date))
+        if end_date:
+            trips = trips.filter(Q(start_date__lte=end_date) | Q(start_date__isnull=True, date__lte=end_date))
+
+        order_by = (request.query_params.get('order_by') or '').strip()
+        order_dir = (request.query_params.get('order_dir') or 'desc').strip().lower()
+        allowed_order = {'start_date', 'end_date', 'status', 'total_value', 'expense_value'}
+        if order_by in allowed_order:
+            if order_by == 'start_date':
+                if order_dir == 'desc':
+                    trips = trips.order_by('-start_date', '-date', '-id')
+                else:
+                    trips = trips.order_by('start_date', 'date', 'id')
+            else:
+                prefix = '-' if order_dir == 'desc' else ''
+                trips = trips.order_by(f'{prefix}{order_by}', '-id')
+        else:
+            trips = trips.order_by('-start_date', '-date', '-id')
+
+        fields_param = (request.query_params.get('fields') or '').strip()
+        field_specs = {
+            'vehicle': ('Veículo', lambda t: t.vehicle.plate if t.vehicle else ''),
+            'start_date': ('Início', lambda t: t.start_date.strftime('%d/%m/%Y') if t.start_date else (t.date.strftime('%d/%m/%Y') if t.date else '')),
+            'end_date': ('Fim', lambda t: t.end_date.strftime('%d/%m/%Y') if t.end_date else '-'),
+            'progress_type': ('Andamento', lambda t: t.progress_type or '-'),
+            'status': ('Status', lambda t: 'Em curso' if t.status == 'in_progress' else 'Encerrada'),
+            'total_value': ('Receita', lambda t: f"R$ {float(t.total_value or 0):.2f}"),
+            'expense_value': ('Despesa', lambda t: f"R$ {float(t.expense_value or 0):.2f}"),
+            'net_value': ('Líquido', lambda t: f"R$ {float((t.total_value or 0) - (t.expense_value or 0)):.2f}"),
+            'is_received': ('Recebida', lambda t: 'Sim' if t.is_received else 'Não'),
+        }
+        selected_fields = [f for f in fields_param.split(',') if f in field_specs] if fields_param else []
+        if not selected_fields:
+            selected_fields = ['vehicle', 'start_date', 'end_date', 'progress_type', 'status', 'net_value']
+
+        in_progress = trips.filter(status='in_progress').count()
+        completed = trips.filter(status='completed').count()
+
+        rev_manual_qs = TransportRevenue.objects.filter(vehicle__tenant=tenant)
+        exp_manual_qs = TransportExpense.objects.filter(vehicle__tenant=tenant)
+        if vehicle_id:
+            rev_manual_qs = rev_manual_qs.filter(vehicle_id=vehicle_id)
+            exp_manual_qs = exp_manual_qs.filter(vehicle_id=vehicle_id)
+        if start_date:
+            rev_manual_qs = rev_manual_qs.filter(date__gte=start_date)
+            exp_manual_qs = exp_manual_qs.filter(date__gte=start_date)
+        if end_date:
+            rev_manual_qs = rev_manual_qs.filter(date__lte=end_date)
+            exp_manual_qs = exp_manual_qs.filter(date__lte=end_date)
+
+        rev_manual = rev_manual_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        exp_manual = exp_manual_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        rev_trip = trips.filter(is_received=True).aggregate(total=Sum('total_value'))['total'] or Decimal('0')
+        exp_trip = trips.aggregate(total=Sum('expense_value'))['total'] or Decimal('0')
+
+        total_revenue = rev_manual + rev_trip
+        total_expense = exp_manual + exp_trip
+        net = total_revenue - total_expense
+
+        rows = [[field_specs[field][1](t) for field in selected_fields] for t in trips[:30]]
+
+        summary = [
+            f"Veículos cadastrados: {vehicles_count}",
+            f"Viagens em curso: {in_progress}",
+            f"Viagens encerradas: {completed}",
+            f"Receita total: R$ {float(total_revenue):.2f}",
+            f"Despesa total: R$ {float(total_expense):.2f}",
+            f"Resultado líquido: R$ {float(net):.2f}",
+        ]
+
+        pdf_bytes = self._build_pdf(
+            title='Relatório da Transportadora',
+            subtitle=f"Tenant: {tenant.name} | Período: {start_date or '-'} até {end_date or '-'}",
+            summary_items=summary,
+            columns=[field_specs[field][0] for field in selected_fields],
+            rows=rows,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="relatorio_transportadora.pdf"'
+        return response
+
+    @action(detail=False, methods=['get'], url_path='investments-pdf')
+    def investments_pdf(self, request):
+        tenant = request.user.tenant
+        if not getattr(tenant, 'has_module_investments', False):
+            return Response({'detail': 'Módulo investments não habilitado para este tenant.'}, status=status.HTTP_403_FORBIDDEN)
+
+        investments = Investment.objects.filter(tenant=tenant).order_by('-buy_date', '-created_at')
+        start_date = parse_date(request.query_params.get('start_date') or '')
+        end_date = parse_date(request.query_params.get('end_date') or '')
+        ticker = (request.query_params.get('ticker') or '').strip().upper()
+
+        if start_date:
+            investments = investments.filter(buy_date__gte=start_date)
+        if end_date:
+            investments = investments.filter(buy_date__lte=end_date)
+        if ticker:
+            investments = investments.filter(ticker__iexact=ticker)
+
+        order_by = (request.query_params.get('order_by') or '').strip()
+        order_dir = (request.query_params.get('order_dir') or 'desc').strip().lower()
+        allowed_order = {'buy_date', 'ticker', 'buy_price', 'quantity'}
+        if order_by in allowed_order:
+            prefix = '-' if order_dir == 'desc' else ''
+            investments = investments.order_by(f'{prefix}{order_by}')
+        else:
+            investments = investments.order_by('-buy_date', '-created_at')
+
+        fields_param = (request.query_params.get('fields') or '').strip()
+        selected_fields = [f for f in fields_param.split(',') if f in {'ticker', 'quantity', 'buy_price', 'current_price', 'pnl', 'buy_date'}] if fields_param else []
+        if not selected_fields:
+            selected_fields = ['ticker', 'quantity', 'buy_price', 'current_price', 'pnl', 'buy_date']
+
+        total_invested = Decimal('0')
+        total_current = Decimal('0')
+        rows = []
+
+        for inv in investments[:40]:
+            buy_total = (inv.buy_price or Decimal('0')) * (inv.quantity or Decimal('0'))
+            total_invested += buy_total
+            current_price = get_current_price(inv.ticker)
+            current_total = (Decimal(str(current_price)) * (inv.quantity or Decimal('0'))) if current_price is not None else buy_total
+            total_current += current_total
+            pnl = current_total - buy_total
+
+            computed = {
+                'ticker': inv.ticker,
+                'quantity': f"{float(inv.quantity):.4f}",
+                'buy_price': f"R$ {float(inv.buy_price):.2f}",
+                'current_price': f"R$ {float(current_price):.2f}" if current_price is not None else '-',
+                'pnl': f"R$ {float(pnl):.2f}",
+                'buy_date': inv.buy_date.strftime('%d/%m/%Y') if inv.buy_date else '',
+            }
+            rows.append([computed[field] for field in selected_fields])
+
+        pnl_total = total_current - total_invested
+        summary = [
+            f"Ativos cadastrados: {investments.count()}",
+            f"Valor investido: R$ {float(total_invested):.2f}",
+            f"Valor atual estimado: R$ {float(total_current):.2f}",
+            f"PnL total: R$ {float(pnl_total):.2f}",
+        ]
+
+        label_map = {
+            'ticker': 'Ticker',
+            'quantity': 'Qtd',
+            'buy_price': 'Preço Compra',
+            'current_price': 'Preço Atual',
+            'pnl': 'PnL',
+            'buy_date': 'Data Compra',
+        }
+
+        pdf_bytes = self._build_pdf(
+            title='Relatório de Investimentos',
+            subtitle=f"Tenant: {tenant.name} | Período: {start_date or '-'} até {end_date or '-'} | Ticker: {ticker or 'Todos'}",
+            summary_items=summary,
+            columns=[label_map[field] for field in selected_fields],
+            rows=rows,
+        )
+
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="relatorio_investimentos.pdf"'
+        return response
