@@ -4,12 +4,13 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
-from .models import Tenant, TenantParameter
+from .models import Tenant, TenantParameter, TenantAuditLog
+from .audit import log_tenant_action
 from .serializers import (
     UserSerializer, UserCreateSerializer, TenantSerializer,
     CustomTokenObtainPairSerializer, TenantAdminCreateSerializer,
     TenantAdminUserCreateSerializer, TenantAdminUserUpdateSerializer,
-    TenantParameterSerializer,
+    TenantParameterSerializer, TenantAuditLogSerializer,
 )
 from .permissions import IsPlatformAdmin, IsTenantAdminOrManager
 
@@ -79,6 +80,77 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(
+        detail=False,
+        methods=['get', 'post'],
+        permission_classes=[IsAuthenticated, IsTenantAdminOrManager],
+        url_path='current-tenant-users'
+    )
+    def current_tenant_users(self, request):
+        """Lista/cria usuários do tenant atual (somente admin/manager do tenant)."""
+        tenant = getattr(request.user, 'tenant', None)
+        if not tenant:
+            return Response({'detail': 'Tenant do usuário não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.method.lower() == 'get':
+            users = User.objects.filter(tenant=tenant).order_by('username')
+            return Response(UserSerializer(users, many=True).data)
+
+        serializer = TenantAdminUserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        username = validated.get('username')
+        email = validated.get('email')
+        password = validated.pop('password')
+        validated.pop('password_confirm', None)
+
+        if User.objects.filter(username=username).exists():
+            return Response({'username': ['Username já em uso.']}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(email=email, tenant=tenant).exists():
+            return Response({'email': ['Email já em uso neste tenant.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.create_user(tenant=tenant, password=password, **validated)
+        log_tenant_action(
+            tenant=tenant,
+            user=request.user,
+            action='user_created',
+            entity_type='user',
+            entity_id=str(user.id),
+            details={'email': user.email, 'role': user.role},
+        )
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=False,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated, IsTenantAdminOrManager],
+        url_path=r'current-tenant-users/(?P<user_id>[^/.]+)'
+    )
+    def current_tenant_user_update(self, request, user_id=None):
+        """Atualiza dados/papel/ativo de usuário do tenant atual (somente admin/manager)."""
+        tenant = getattr(request.user, 'tenant', None)
+        if not tenant:
+            return Response({'detail': 'Tenant do usuário não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(id=user_id, tenant=tenant)
+        except User.DoesNotExist:
+            return Response({'detail': 'Usuário não encontrado neste tenant.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = TenantAdminUserUpdateSerializer(user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_tenant_action(
+            tenant=tenant,
+            user=request.user,
+            action='user_updated',
+            entity_type='user',
+            entity_id=str(user.id),
+            details={'email': user.email, 'role': user.role, 'is_active': user.is_active},
+        )
+        return Response(UserSerializer(user).data)
 
 
 class TenantViewSet(viewsets.ReadOnlyModelViewSet):
@@ -179,7 +251,11 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'Tenant do usuário não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
 
         module = (request.query_params.get('module') or request.data.get('module') or '').strip().lower()
-        if module not in [TenantParameter.MODULE_TRANSPORT, TenantParameter.MODULE_INVESTMENTS]:
+        if module not in [
+            TenantParameter.MODULE_GENERAL,
+            TenantParameter.MODULE_TRANSPORT,
+            TenantParameter.MODULE_INVESTMENTS,
+        ]:
             return Response({'module': ['Módulo inválido.']}, status=status.HTTP_400_BAD_REQUEST)
 
         if module == TenantParameter.MODULE_TRANSPORT and not tenant.has_module_transport:
@@ -193,6 +269,16 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
                 'TIPO_RECEBIMENTO_MOTORISTA': '1',
                 'PORCENTAGEM_MOTORISTA': '10',
                 'TIPO_PORCENTAGEM': 'bruta',
+            }
+        elif module == TenantParameter.MODULE_GENERAL:
+            defaults = {
+                'PASSWORD_MIN_LENGTH': '8',
+                'SESSION_TIMEOUT_MINUTES': '60',
+                'DEFAULT_CURRENCY': 'BRL',
+                'TIMEZONE': 'America/Sao_Paulo',
+                'DATE_FORMAT': 'DD/MM/YYYY',
+                'REQUIRE_APPROVAL_FOR_HIGH_EXPENSE': 'false',
+                'APPROVAL_THRESHOLD_AMOUNT': '1000',
             }
 
         existing = {
@@ -245,4 +331,34 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
             )
             updated.append(obj)
 
+        log_tenant_action(
+            tenant=tenant,
+            user=request.user,
+            action='parameters_updated',
+            entity_type='tenant_parameters',
+            entity_id=module,
+            details={'module': module, 'keys': [item.key for item in updated]},
+        )
+
         return Response(TenantParameterSerializer(updated, many=True).data)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[IsAuthenticated, IsTenantAdminOrManager],
+        url_path='current/audit-logs'
+    )
+    def current_audit_logs(self, request):
+        tenant = getattr(request.user, 'tenant', None)
+        if not tenant:
+            return Response({'detail': 'Tenant do usuário não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        limit = request.query_params.get('limit')
+        try:
+            limit = int(limit) if limit is not None else 50
+        except (ValueError, TypeError):
+            limit = 50
+        limit = min(max(limit, 1), 200)
+
+        logs = TenantAuditLog.objects.filter(tenant=tenant).select_related('user')[:limit]
+        return Response(TenantAuditLogSerializer(logs, many=True).data)

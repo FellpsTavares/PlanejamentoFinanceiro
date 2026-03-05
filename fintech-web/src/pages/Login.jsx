@@ -35,12 +35,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">FinManager</h1>
-          <p className="text-blue-100">Gestão Financeira Inteligente</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Kaptal Pro</h1>
+          <p className="text-gray-600">Gestão Financeira Inteligente</p>
         </div>
 
         {/* Card de Login */}
@@ -110,8 +110,8 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-blue-100 mt-6 text-sm">
-          © 2024 FinManager. Todos os direitos reservados.
+        <p className="text-center text-gray-600 mt-6 text-sm">
+          © 2024 Kaptal Pro. Todos os direitos reservados.
         </p>
       </div>
     </div>

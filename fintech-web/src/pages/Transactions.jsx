@@ -85,7 +85,7 @@ export default function Transactions() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="spinner mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando...</p>
@@ -95,30 +95,18 @@ export default function Transactions() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">Transações</h1>
-          <div className="flex gap-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="btn-secondary"
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => navigate('/transactions/new')}
-              className="btn-primary"
-            >
-              Nova Transação
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-screen bg-white">
       {/* Conteúdo */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="w-full px-4 py-8">
+        <div className="mb-6 flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Transações</h1>
+          <button
+            onClick={() => navigate('/transactions/new')}
+            className="btn-primary"
+          >
+            Nova Transação
+          </button>
+        </div>
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
             {error}

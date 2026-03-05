@@ -98,9 +98,11 @@ class User(AbstractUser):
 
 
 class TenantParameter(models.Model):
+    MODULE_GENERAL = 'general'
     MODULE_TRANSPORT = 'transport'
     MODULE_INVESTMENTS = 'investments'
     MODULE_CHOICES = (
+        (MODULE_GENERAL, _('Geral')),
         (MODULE_TRANSPORT, _('Transportadora')),
         (MODULE_INVESTMENTS, _('Investimentos')),
     )
@@ -121,3 +123,21 @@ class TenantParameter(models.Model):
 
     def __str__(self):
         return f"{self.tenant.slug} | {self.module} | {self.key}={self.value}"
+
+
+class TenantAuditLog(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='audit_logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=100)
+    entity_type = models.CharField(max_length=50)
+    entity_id = models.CharField(max_length=100, blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _('Log de Auditoria')
+        verbose_name_plural = _('Logs de Auditoria')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.tenant.slug} | {self.action} | {self.entity_type}:{self.entity_id}"

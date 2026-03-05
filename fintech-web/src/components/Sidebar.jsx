@@ -1,33 +1,71 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useSidebar } from '../hooks/useSidebar.jsx';
 import { authService } from '../services/auth';
 
 export default function Sidebar() {
-  const { open, toggle, close } = useSidebar();
   const location = useLocation();
   const [user, setUser] = useState(() => authService.getCurrentUser());
-  const [expanded, setExpanded] = useState({
-    initial: true,
-    investments: false,
-    transport: false,
-    settings: false,
-  });
+  const [hovered, setHovered] = useState(false);
 
-  const toggleSection = (section) => {
-    setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
+  const modules = useMemo(() => {
+    const list = [
+      {
+        key: 'initial',
+        label: 'Inicial',
+        icon: '⌂',
+        active: location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/transactions'),
+        items: [
+          { to: '/dashboard', label: 'Dashboard' },
+          { to: '/transactions', label: 'Transações' },
+          { to: '/transactions/new', label: 'Nova Transação' },
+        ],
+      },
+    ];
 
-  useEffect(() => {
-    const path = location.pathname;
-    setExpanded((prev) => ({
-      ...prev,
-      initial: prev.initial || path.startsWith('/dashboard') || path.startsWith('/transactions'),
-      investments: prev.investments || path.startsWith('/investments'),
-      transport: prev.transport || path.startsWith('/transport'),
-      settings: prev.settings || path.startsWith('/settings') || path.startsWith('/admin/tenants'),
-    }));
-  }, [location.pathname]);
+    if (user?.tenant?.has_module_investments) {
+      list.push({
+        key: 'investments',
+        label: 'Investimentos',
+        icon: '↗',
+        active: location.pathname.startsWith('/investments'),
+        items: [
+          { to: '/investments/dashboard', label: 'Dashboard' },
+          { to: '/investments', label: 'Ativos' },
+        ],
+      });
+    }
+
+    if (user?.tenant?.has_module_transport) {
+      list.push({
+        key: 'transport',
+        label: 'Transportadora',
+        icon: '🚚',
+        active: location.pathname.startsWith('/transport'),
+        items: [
+          { to: '/transport/dashboard', label: 'Dashboard' },
+          { to: '/transport/vehicles', label: 'Veículos' },
+          { to: '/transport/trips/new', label: 'Nova Viagem' },
+        ],
+      });
+    }
+
+    const settingsItems = [{ to: '/settings/modules', label: 'Configurações' }];
+    if (user?.is_platform_admin) {
+      settingsItems.push({ to: '/admin/tenants', label: 'Admin Tenants' });
+    }
+
+    list.push({
+      key: 'settings',
+      label: 'Configurações',
+      icon: '⚙',
+      active: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/tenants'),
+      items: settingsItems,
+    });
+
+    return list;
+  }, [location.pathname, user]);
+
+  const isExpanded = hovered;
 
   useEffect(() => {
     const onChange = () => setUser(authService.getCurrentUser());
@@ -44,81 +82,49 @@ export default function Sidebar() {
   }, []);
 
   return (
-    <>
-      <button
-        onClick={toggle}
-        className={`fixed top-4 z-50 p-2 bg-white rounded shadow transition-all ${open ? 'left-72' : 'left-4'}`}
-        aria-label="Abrir menu"
-      >
-        ☰
-      </button>
-
-      {open && <div className="fixed inset-0 bg-black/20 z-30" onClick={close} />}
-
-      <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white shadow-lg z-40 transform transition-transform ${open ? 'translate-x-0' : '-translate-x-full'}`}
-      >
-        <div className="p-4 border-b">
-          <h2 className="text-xl font-bold">FinManager</h2>
+    <aside
+      className={`fixed top-0 left-0 h-full z-40 border-r border-slate-800/80 bg-slate-950 text-slate-100 transition-all duration-200 ${isExpanded ? 'w-72' : 'w-16'}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="h-full overflow-y-auto px-2 py-3">
+        <div className={`mb-4 flex items-center ${isExpanded ? 'justify-start px-2' : 'justify-center'}`}>
+          <div className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center text-sm font-bold">K</div>
+          {isExpanded && <span className="ml-2 font-semibold tracking-wide">Kaptal</span>}
         </div>
-        <nav className="p-4 flex flex-col gap-2">
-          <button type="button" onClick={() => toggleSection('initial')} className="w-full p-2 hover:bg-gray-100 rounded flex items-center justify-between text-left font-semibold">
-            <span>INICIAL</span>
-            <span>{expanded.initial ? '˅' : '>'}</span>
-          </button>
-          {expanded.initial && (
-            <div className="pl-2 flex flex-col gap-1">
-              <Link to="/dashboard" onClick={close} className="p-2 hover:bg-gray-100 rounded">Dashboard</Link>
-              <Link to="/transactions" onClick={close} className="p-2 hover:bg-gray-100 rounded">Transações</Link>
-              <Link to="/transactions/new" onClick={close} className="p-2 hover:bg-gray-100 rounded">Nova Transação</Link>
-            </div>
-          )}
 
-          {user?.tenant?.has_module_investments && (
-            <>
-              <button type="button" onClick={() => toggleSection('investments')} className="w-full p-2 hover:bg-gray-100 rounded flex items-center justify-between text-left font-semibold">
-                <span>INVESTIMENTOS</span>
-                <span>{expanded.investments ? '˅' : '>'}</span>
-              </button>
-              {expanded.investments && (
-                <div className="pl-2 flex flex-col gap-1">
-                  <Link to="/investments/dashboard" onClick={close} className="p-2 hover:bg-gray-100 rounded">Dashboard</Link>
-                  <Link to="/investments" onClick={close} className="p-2 hover:bg-gray-100 rounded">Ativos</Link>
+        <nav className="space-y-2">
+          {modules.map((module) => (
+            <div key={module.key} className={`rounded-xl ${module.active ? 'bg-slate-900 border border-slate-700' : 'border border-transparent'}`}>
+              <div className={`flex items-center ${isExpanded ? 'px-3 py-2' : 'justify-center py-2'}`} title={module.label}>
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800 text-sm">{module.icon}</span>
+                {isExpanded && (
+                  <div className="ml-3 min-w-0">
+                    <p className="text-sm font-semibold leading-5">{module.label}</p>
+                  </div>
+                )}
+              </div>
+
+              {isExpanded && (
+                <div className="pb-2 pl-12 pr-2 flex flex-col gap-1">
+                  {module.items.map((item) => {
+                    const itemActive = location.pathname === item.to;
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`rounded-md px-2 py-1.5 text-sm transition-colors ${itemActive ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                      >
+                        {item.label}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
-            </>
-          )}
-
-          {user?.tenant?.has_module_transport && (
-            <>
-              <button type="button" onClick={() => toggleSection('transport')} className="w-full p-2 hover:bg-gray-100 rounded flex items-center justify-between text-left font-semibold">
-                <span>TRANSPORTADORA</span>
-                <span>{expanded.transport ? '˅' : '>'}</span>
-              </button>
-              {expanded.transport && (
-                <div className="pl-2 flex flex-col gap-1">
-                  <Link to="/transport/dashboard" onClick={close} className="p-2 hover:bg-gray-100 rounded">Dashboard</Link>
-                  <Link to="/transport/vehicles" onClick={close} className="p-2 hover:bg-gray-100 rounded">Veículos</Link>
-                  <Link to="/transport/trips/new" onClick={close} className="p-2 hover:bg-gray-100 rounded">Nova Viagem</Link>
-                </div>
-              )}
-            </>
-          )}
-
-          <button type="button" onClick={() => toggleSection('settings')} className="w-full p-2 hover:bg-gray-100 rounded flex items-center justify-between text-left font-semibold">
-            <span>CONFIGURAÇÕES</span>
-            <span>{expanded.settings ? '˅' : '>'}</span>
-          </button>
-          {expanded.settings && (
-            <div className="pl-2 flex flex-col gap-1">
-              <Link to="/settings/modules" onClick={close} className="p-2 hover:bg-gray-100 rounded">Configurações</Link>
-              {user?.is_platform_admin && (
-                <Link to="/admin/tenants" onClick={close} className="p-2 hover:bg-gray-100 rounded">Admin Tenants</Link>
-              )}
             </div>
-          )}
+          ))}
         </nav>
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 }

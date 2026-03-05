@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from .models import Tenant, TenantParameter
+from .models import Tenant, TenantParameter, TenantAuditLog
 
 User = get_user_model()
 
@@ -213,3 +213,11 @@ class TenantParameterSerializer(serializers.ModelSerializer):
         model = TenantParameter
         fields = ['id', 'module', 'key', 'value', 'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class TenantAuditLogSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+
+    class Meta:
+        model = TenantAuditLog
+        fields = ['id', 'action', 'entity_type', 'entity_id', 'details', 'user_email', 'created_at']

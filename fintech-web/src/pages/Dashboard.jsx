@@ -37,14 +37,9 @@ export default function Dashboard() {
     loadData();
   }, [navigate]);
 
-  const handleLogout = () => {
-    authService.logout();
-    navigate('/login');
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="spinner mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando...</p>
@@ -54,25 +49,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">FinManager</h1>
-            <p className="text-gray-600">Bem-vindo, {user?.first_name || user?.email}!</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="btn-secondary"
-          >
-            Sair
-          </button>
-        </div>
-      </header>
-
+    <div className="min-h-screen bg-white">
       {/* Conteúdo */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="w-full px-4 py-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Kaptal Pro</h1>
+          <p className="text-gray-600">Bem-vindo, {user?.first_name || user?.email}!</p>
+        </div>
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
             {error}

@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
 from datetime import datetime, timedelta
+from accounts.audit import log_tenant_action
 from .models import Category, Transaction, RecurringTransaction, Investment
 from .services.brapi_service import get_current_price
 from .serializers import (
@@ -30,7 +31,40 @@ class CategoryViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Cria categoria associada ao tenant atual"""
-        serializer.save(tenant=self.request.user.tenant)
+        category = serializer.save(tenant=self.request.user.tenant)
+        log_tenant_action(
+            tenant=self.request.user.tenant,
+            user=self.request.user,
+            action='category_created',
+            entity_type='category',
+            entity_id=str(category.id),
+            details={'name': category.name, 'type': category.type},
+        )
+
+    def perform_update(self, serializer):
+        category = serializer.save()
+        log_tenant_action(
+            tenant=self.request.user.tenant,
+            user=self.request.user,
+            action='category_updated',
+            entity_type='category',
+            entity_id=str(category.id),
+            details={'name': category.name, 'type': category.type, 'is_active': category.is_active},
+        )
+
+    def perform_destroy(self, instance):
+        category_id = str(instance.id)
+        category_name = instance.name
+        category_type = instance.type
+        super().perform_destroy(instance)
+        log_tenant_action(
+            tenant=self.request.user.tenant,
+            user=self.request.user,
+            action='category_deleted',
+            entity_type='category',
+            entity_id=category_id,
+            details={'name': category_name, 'type': category_type},
+        )
     
     @action(detail=False, methods=['get'])
     def by_type(self, request):

@@ -59,4 +59,15 @@ export const transactionService = {
     const response = await api.post('/categories/', data);
     return response.data;
   },
+
+  // Atualizar categoria
+  updateCategory: async (id, data) => {
+    const response = await api.patch(`/categories/${id}/`, data);
+    return response.data;
+  },
+
+  // Excluir categoria
+  deleteCategory: async (id) => {
+    await api.delete(`/categories/${id}/`);
+  },
 };

@@ -1,8 +1,8 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { authService } from '../services/auth';
-import { SidebarProvider } from '../hooks/useSidebar.jsx';
 import Sidebar from './Sidebar';
+import AppHeader from './AppHeader';
 
 export default function ProtectedRoute({ children }) {
   if (!authService.isAuthenticated()) {
@@ -10,9 +10,12 @@ export default function ProtectedRoute({ children }) {
   }
 
   return (
-    <SidebarProvider>
+    <>
       <Sidebar />
-      <div className="pl-16">{children}</div>
-    </SidebarProvider>
+      <div className="pl-16 min-h-screen bg-white">
+        <AppHeader />
+        <div className="pt-2">{children}</div>
+      </div>
+    </>
   );
 }
