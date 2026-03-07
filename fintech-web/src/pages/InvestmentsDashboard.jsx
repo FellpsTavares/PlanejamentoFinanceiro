@@ -55,7 +55,7 @@ export default function InvestmentsDashboard() {
           };
         }));
       } catch (err) {
-        console.error('Erro ao atualizar cotacoes no dashboard', err);
+        console.error('Erro ao atualizar cotacoes no painel', err);
       } finally {
         setLoadingQuotes(false);
       }
@@ -70,8 +70,8 @@ export default function InvestmentsDashboard() {
         setInvestments(base);
         await fetchLivePrices(base.map((item) => item.ticker));
       } catch (err) {
-        console.error('Erro ao carregar dashboard de investimentos', err);
-        setError('Erro ao carregar dashboard de investimentos.');
+        console.error('Erro ao carregar painel de investimentos', err);
+        setError('Erro ao carregar painel de investimentos.');
       } finally {
         setLoading(false);
       }
@@ -105,12 +105,12 @@ export default function InvestmentsDashboard() {
     };
   }, [investments]);
 
-  if (loading) return <div className="p-6">Carregando dashboard de investimentos...</div>;
+  if (loading) return <div className="p-6">Carregando painel de investimentos...</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Dashboard de Investimentos</h1>
+      <h1 className="text-2xl font-bold mb-4">Painel de Investimentos</h1>
       {loadingQuotes && <p className="mb-3 text-xs text-slate-500">Atualizando cotacoes em tempo real...</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

@@ -99,10 +99,12 @@ class User(AbstractUser):
 
 class TenantParameter(models.Model):
     MODULE_GENERAL = 'general'
+    MODULE_FINANCE = 'finance'
     MODULE_TRANSPORT = 'transport'
     MODULE_INVESTMENTS = 'investments'
     MODULE_CHOICES = (
         (MODULE_GENERAL, _('Geral')),
+        (MODULE_FINANCE, _('Finanças')),
         (MODULE_TRANSPORT, _('Transportadora')),
         (MODULE_INVESTMENTS, _('Investimentos')),
     )

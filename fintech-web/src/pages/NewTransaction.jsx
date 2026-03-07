@@ -8,12 +8,18 @@ export default function NewTransaction() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState([]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
     type: 'expense',
     category: '',
+    payment_method: '',
+    is_fixed_monthly_debt: false,
+    fixed_start_date: new Date().toISOString().split('T')[0],
+    fixed_end_date: '',
+    fixed_due_day: '',
     transaction_date: new Date().toISOString().split('T')[0],
     notes: '',
   });
@@ -22,6 +28,7 @@ export default function NewTransaction() {
 
   useEffect(() => {
     loadCategories();
+    loadPaymentMethods();
   }, []);
 
   const loadCategories = async () => {
@@ -35,6 +42,16 @@ export default function NewTransaction() {
       setCategories(data.results || data);
     } catch (err) {
       setError('Erro ao carregar categorias');
+      console.error(err);
+    }
+  };
+
+  const loadPaymentMethods = async () => {
+    try {
+      const data = await transactionService.listPaymentMethods();
+      setPaymentMethods(data.results || data || []);
+    } catch (err) {
+      setError('Erro ao carregar formas de pagamento');
       console.error(err);
     }
   };
@@ -53,11 +70,17 @@ export default function NewTransaction() {
   };
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value,
+      };
+      if (name === 'is_fixed_monthly_debt' && checked) {
+        next.type = 'expense';
+      }
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -73,12 +96,37 @@ export default function NewTransaction() {
         return;
       }
 
+      if (formData.is_fixed_monthly_debt) {
+        if (!formData.fixed_start_date || !formData.fixed_end_date || !formData.fixed_due_day) {
+          setError('Para dívida fixa mensal, informe data inicial, data final e dia de vencimento.');
+          setLoading(false);
+          return;
+        }
+
+        await transactionService.createRecurring({
+          description: formData.description,
+          amount: parseMoney(formData.amount),
+          type: formData.type,
+          category: formData.category,
+          frequency: 'monthly',
+          installments_count: 1,
+          start_date: formData.fixed_start_date,
+          end_date: formData.fixed_end_date,
+          due_day: Number(formData.fixed_due_day),
+          is_fixed_monthly: true,
+        });
+
+        navigate('/transactions');
+        return;
+      }
+
       // Criar transação
       await transactionService.create({
         description: formData.description,
         amount: parseMoney(formData.amount),
         type: formData.type,
         category: formData.category,
+        payment_method: formData.payment_method || null,
         transaction_date: formData.transaction_date,
         notes: formData.notes,
       });
@@ -94,6 +142,7 @@ export default function NewTransaction() {
 
   // Filtrar categorias por tipo
   const filteredCategories = categories.filter((cat) => cat.type === formData.type);
+  const selectedPaymentMethod = paymentMethods.find((item) => String(item.id) === String(formData.payment_method || ''));
 
   return (
     <div className="min-h-screen bg-white">
@@ -209,18 +258,101 @@ export default function NewTransaction() {
             </div>
 
             {/* Data */}
+            {!formData.is_fixed_monthly_debt && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data da Transação
+                </label>
+                <input
+                  type="date"
+                  name="transaction_date"
+                  value={formData.transaction_date}
+                  onChange={handleChange}
+                  className="input-field"
+                />
+              </div>
+            )}
+
+            {/* Dívida fixa mensal */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Data da Transação
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  name="is_fixed_monthly_debt"
+                  checked={Boolean(formData.is_fixed_monthly_debt)}
+                  onChange={handleChange}
+                />
+                Marcar como dívida fixa mensal
               </label>
-              <input
-                type="date"
-                name="transaction_date"
-                value={formData.transaction_date}
-                onChange={handleChange}
-                className="input-field"
-              />
+              {formData.is_fixed_monthly_debt && (
+                <p className="mt-1 text-xs text-gray-600">Dívida fixa mensal é registrada como despesa recorrente mensal.</p>
+              )}
+              {formData.is_fixed_monthly_debt && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Data inicial *</label>
+                    <input
+                      type="date"
+                      name="fixed_start_date"
+                      value={formData.fixed_start_date}
+                      onChange={handleChange}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Data final *</label>
+                    <input
+                      type="date"
+                      name="fixed_end_date"
+                      value={formData.fixed_end_date}
+                      onChange={handleChange}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Dia de vencimento *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      name="fixed_due_day"
+                      value={formData.fixed_due_day}
+                      onChange={handleChange}
+                      className="input-field"
+                      placeholder="Ex.: 10"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Forma de pagamento */}
+            {!formData.is_fixed_monthly_debt && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Forma de pagamento
+                </label>
+                <select
+                  name="payment_method"
+                  value={formData.payment_method}
+                  onChange={handleChange}
+                  className="input-field"
+                >
+                  <option value="">Selecione uma forma de pagamento</option>
+                  {paymentMethods.filter((item) => item.is_active).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.type === 'credit_card' ? 'Cartão de crédito' : item.type})
+                    </option>
+                  ))}
+                </select>
+
+                {selectedPaymentMethod?.type === 'credit_card' && (
+                  <p className="mt-2 text-xs text-amber-700">
+                    Lançamentos em cartão de crédito não impactam o saldo até a fatura ser marcada como paga.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Notas */}
             <div>
@@ -245,7 +377,7 @@ export default function NewTransaction() {
                 className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading && <span className="spinner"></span>}
-                {loading ? 'Salvando...' : 'Salvar Transação'}
+                {loading ? 'Salvando...' : formData.is_fixed_monthly_debt ? 'Salvar Dívida Fixa Mensal' : 'Salvar Transação'}
               </button>
               <button
                 type="button"

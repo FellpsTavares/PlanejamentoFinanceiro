@@ -10,6 +10,7 @@ import { toast } from '../utils/toast';
 
 const MODULE_LABELS = {
   general: 'Geral',
+  finance: 'Finanças',
   transport: 'Transportadora',
   investments: 'Investimentos',
 };
@@ -45,7 +46,7 @@ export default function ModuleSettings() {
   }, []);
 
   const enabledModules = useMemo(() => {
-    const modules = ['general'];
+    const modules = ['general', 'finance'];
     if (hasTransportModule) modules.push('transport');
     if (hasInvestmentsModule) modules.push('investments');
     return modules;
@@ -59,6 +60,7 @@ export default function ModuleSettings() {
     general: false,
     users: false,
     categories: false,
+    paymentMethods: false,
     backup: false,
     audit: false,
   });
@@ -77,6 +79,14 @@ export default function ModuleSettings() {
 
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [paymentMethodForm, setPaymentMethodForm] = useState({
+    name: '',
+    type: 'pix',
+    due_day: '',
+    closing_day: '',
+  });
   const [generalLoading, setGeneralLoading] = useState(false);
   const [generalSaving, setGeneralSaving] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -128,6 +138,18 @@ export default function ModuleSettings() {
     }
   };
 
+  const loadPaymentMethods = async () => {
+    setPaymentMethodsLoading(true);
+    try {
+      const data = await transactionService.listPaymentMethods();
+      setPaymentMethods(data?.results || data || []);
+    } catch (err) {
+      toast('Erro ao carregar formas de pagamento', 'error');
+    } finally {
+      setPaymentMethodsLoading(false);
+    }
+  };
+
   const loadGeneralSettings = async () => {
     setGeneralLoading(true);
     try {
@@ -169,7 +191,7 @@ export default function ModuleSettings() {
       const data = await tenantUsersService.list();
       setUsers(data || []);
     } catch (err) {
-      const detail = err?.response?.data?.detail || 'Erro ao carregar usuários do tenant';
+      const detail = err?.response?.data?.detail || 'Erro ao carregar usuários';
       toast(String(detail), 'error');
     } finally {
       setUsersLoading(false);
@@ -184,8 +206,14 @@ export default function ModuleSettings() {
 
   useEffect(() => {
     if (activeModule === 'general') {
-      loadCategories();
       loadGeneralSettings();
+    }
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (activeModule === 'finance') {
+      loadCategories();
+      loadPaymentMethods();
     }
   }, [activeModule]);
 
@@ -394,6 +422,53 @@ export default function ModuleSettings() {
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Erro ao excluir categoria';
       toast(String(msg), 'error');
+    }
+  };
+
+  const handleCreatePaymentMethod = async () => {
+    if (!canEdit) {
+      toast('Somente admin/manager pode alterar formas de pagamento.', 'error');
+      return;
+    }
+
+    const name = paymentMethodForm.name.trim();
+    if (!name) {
+      toast('Informe o nome da forma de pagamento', 'error');
+      return;
+    }
+
+    if (paymentMethodForm.type === 'credit_card' && !paymentMethodForm.due_day) {
+      toast('Para cartão de crédito, informe o dia de vencimento.', 'error');
+      return;
+    }
+
+    try {
+      await transactionService.createPaymentMethod({
+        name,
+        type: paymentMethodForm.type,
+        due_day: paymentMethodForm.due_day ? Number(paymentMethodForm.due_day) : null,
+        closing_day: paymentMethodForm.closing_day ? Number(paymentMethodForm.closing_day) : null,
+      });
+      setPaymentMethodForm({ name: '', type: 'pix', due_day: '', closing_day: '' });
+      await loadPaymentMethods();
+      toast('Forma de pagamento criada com sucesso', 'success');
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data || 'Erro ao criar forma de pagamento';
+      toast(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
+    }
+  };
+
+  const handleTogglePaymentMethod = async (item) => {
+    if (!canEdit) {
+      toast('Somente admin/manager pode alterar formas de pagamento.', 'error');
+      return;
+    }
+    try {
+      await transactionService.updatePaymentMethod(item.id, { is_active: !item.is_active });
+      await loadPaymentMethods();
+      toast('Forma de pagamento atualizada', 'success');
+    } catch (err) {
+      toast('Erro ao atualizar forma de pagamento', 'error');
     }
   };
 
@@ -658,7 +733,7 @@ export default function ModuleSettings() {
 
           <div className="card p-4 border rounded space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold">Usuários do seu tenant</h3>
+              <h3 className="text-base font-semibold">Usuários</h3>
               <button className="btn btn-secondary" type="button" onClick={() => toggleSection('users')}>
                 {sectionOpen.users ? 'Recolher' : 'Gerenciar usuários'}
               </button>
@@ -695,7 +770,7 @@ export default function ModuleSettings() {
               {usersLoading ? (
                 <p className="text-sm text-gray-600">Carregando usuários...</p>
               ) : users.length === 0 ? (
-                <p className="text-sm text-gray-600">Nenhum usuário encontrado neste tenant.</p>
+                <p className="text-sm text-gray-600">Nenhum usuário encontrado.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -743,118 +818,9 @@ export default function ModuleSettings() {
             )}
           </div>
 
-          <div className="card p-4 border rounded space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold">Categorias</h3>
-              <button className="btn btn-secondary" type="button" onClick={() => toggleSection('categories')}>
-                {sectionOpen.categories ? 'Recolher' : 'Ajustar categorias'}
-              </button>
-            </div>
-
-            {sectionOpen.categories && (
-              <>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input className="input-field w-full" placeholder="Nome da categoria" value={categoryForm.name} onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
-              <select className="input-field w-full" value={categoryForm.type} onChange={(e) => setCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
-                <option value="expense">Despesa</option>
-                <option value="income">Receita</option>
-              </select>
-              <select className="input-field w-full" value={categoryForm.icon} onChange={(e) => setCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
-                {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                  <option key={emoji.value} value={emoji.value}>{emoji.value} {emoji.label}</option>
-                ))}
-              </select>
-              <input className="input-field w-full" type="color" value={categoryForm.color} onChange={(e) => setCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
-              <input className="input-field w-full md:col-span-2" placeholder="Descrição (opcional)" value={categoryForm.description} onChange={(e) => setCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                <button
-                  key={`new-${emoji.value}`}
-                  type="button"
-                  className={`px-3 py-2 rounded border text-lg ${categoryForm.icon === emoji.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                  onClick={() => setCategoryForm((prev) => ({ ...prev, icon: emoji.value }))}
-                  disabled={!canEdit}
-                  title={emoji.label}
-                >
-                  {emoji.value}
-                </button>
-              ))}
-            </div>
-
-            <button className="btn btn-primary" type="button" onClick={handleCreateCategory} disabled={!canEdit}>
-              Incluir categoria
-            </button>
-
-            {categoriesLoading ? (
-              <p className="text-sm text-gray-600">Carregando categorias...</p>
-            ) : categories.length === 0 ? (
-              <p className="text-sm text-gray-600">Nenhuma categoria cadastrada.</p>
-            ) : (
-              <div className="space-y-2">
-                {categories.map((c) => (
-                  <div key={c.id} className="border rounded p-3">
-                    {editingCategoryId === c.id ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input className="input-field w-full" value={editingCategoryForm.name} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
-                        <select className="input-field w-full" value={editingCategoryForm.type} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
-                          <option value="expense">Despesa</option>
-                          <option value="income">Receita</option>
-                        </select>
-                        <select className="input-field w-full" value={editingCategoryForm.icon} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
-                          {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                            <option key={`edit-opt-${emoji.value}`} value={emoji.value}>{emoji.value} {emoji.label}</option>
-                          ))}
-                        </select>
-                        <input className="input-field w-full" type="color" value={editingCategoryForm.color} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
-                        <input className="input-field w-full md:col-span-2" value={editingCategoryForm.description} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
-
-                        <div className="md:col-span-2 flex flex-wrap gap-2">
-                          {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                            <button
-                              key={`edit-${c.id}-${emoji.value}`}
-                              type="button"
-                              className={`px-3 py-2 rounded border text-lg ${editingCategoryForm.icon === emoji.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                              onClick={() => setEditingCategoryForm((prev) => ({ ...prev, icon: emoji.value }))}
-                              disabled={!canEdit}
-                              title={emoji.label}
-                            >
-                              {emoji.value}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className="md:col-span-2 flex gap-2">
-                          <button className="btn btn-primary" type="button" onClick={handleSaveCategoryEdit} disabled={!canEdit}>Salvar</button>
-                          <button className="btn btn-secondary" type="button" onClick={() => setEditingCategoryId('')}>Cancelar</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm">
-                          <div className="font-medium flex items-center gap-2">
-                            <span>{c.icon || '💰'}</span>
-                            <span>{c.name}</span>
-                          </div>
-                          <div className="text-gray-600">{c.type === 'income' ? 'Receita' : 'Despesa'}</div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <button className="btn btn-secondary" type="button" onClick={() => startEditCategory(c)} disabled={!canEdit}>Editar</button>
-                          <button className="btn btn-secondary" type="button" onClick={() => handleDeleteCategory(c.id)} disabled={!canEdit}>Excluir</button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!canEdit && <p className="text-sm text-gray-500">Somente admin/manager pode alterar categorias.</p>}
-            </>
-            )}
+          <div className="card p-4 border rounded">
+            <h3 className="text-base font-semibold mb-1">Categorias e Formas de Pagamento</h3>
+            <p className="text-sm text-gray-600">Esses itens foram movidos para a aba <strong>Finanças</strong>.</p>
           </div>
 
           <div className="card p-4 border rounded space-y-4">
@@ -920,6 +886,182 @@ export default function ModuleSettings() {
                 ))}
               </div>
             )) : null}
+          </div>
+        </div>
+      ) : activeModule === 'finance' ? (
+        <div className="space-y-4">
+          <div className="card p-4 border rounded space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold">Formas de Pagamento</h3>
+              <button className="btn btn-secondary" type="button" onClick={() => toggleSection('paymentMethods')}>
+                {sectionOpen.paymentMethods ? 'Recolher' : 'Gerenciar formas'}
+              </button>
+            </div>
+
+            {sectionOpen.paymentMethods && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <input
+                    className="input-field w-full md:col-span-2"
+                    placeholder="Nome (ex: Cartão Nubank)"
+                    value={paymentMethodForm.name}
+                    onChange={(e) => setPaymentMethodForm((prev) => ({ ...prev, name: e.target.value }))}
+                    disabled={!canEdit}
+                  />
+                  <select
+                    className="input-field w-full"
+                    value={paymentMethodForm.type}
+                    onChange={(e) => setPaymentMethodForm((prev) => ({ ...prev, type: e.target.value }))}
+                    disabled={!canEdit}
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="cash">Dinheiro</option>
+                    <option value="debit_card">Cartão de Débito</option>
+                    <option value="credit_card">Cartão de Crédito</option>
+                    <option value="bank_transfer">Transferência</option>
+                    <option value="other">Outros</option>
+                  </select>
+                  <input
+                    className="input-field w-full"
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="Dia vencimento"
+                    value={paymentMethodForm.due_day}
+                    onChange={(e) => setPaymentMethodForm((prev) => ({ ...prev, due_day: e.target.value }))}
+                    disabled={!canEdit || paymentMethodForm.type !== 'credit_card'}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button className="btn btn-primary" type="button" onClick={handleCreatePaymentMethod} disabled={!canEdit}>
+                    Incluir forma de pagamento
+                  </button>
+                  <button className="btn btn-secondary" type="button" onClick={loadPaymentMethods}>
+                    Atualizar
+                  </button>
+                </div>
+
+                {paymentMethodsLoading ? (
+                  <p className="text-sm text-gray-600">Carregando formas de pagamento...</p>
+                ) : paymentMethods.length === 0 ? (
+                  <p className="text-sm text-gray-600">Nenhuma forma de pagamento cadastrada.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="py-2 text-left">Nome</th>
+                          <th className="py-2 text-left">Tipo</th>
+                          <th className="py-2 text-left">Vencimento</th>
+                          <th className="py-2 text-left">Status</th>
+                          <th className="py-2 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paymentMethods.map((pm) => (
+                          <tr key={pm.id} className="border-b">
+                            <td className="py-2">{pm.name}</td>
+                            <td className="py-2">{pm.type === 'credit_card' ? 'Cartão de Crédito' : pm.type}</td>
+                            <td className="py-2">{pm.due_day || '—'}</td>
+                            <td className="py-2">{pm.is_active ? 'Ativo' : 'Inativo'}</td>
+                            <td className="py-2 text-right">
+                              <button className="btn btn-secondary" type="button" onClick={() => handleTogglePaymentMethod(pm)} disabled={!canEdit}>
+                                {pm.is_active ? 'Desativar' : 'Ativar'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {!canEdit && <p className="text-sm text-gray-500">Somente admin/manager pode alterar formas de pagamento.</p>}
+              </>
+            )}
+          </div>
+
+          <div className="card p-4 border rounded space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold">Categorias</h3>
+              <button className="btn btn-secondary" type="button" onClick={() => toggleSection('categories')}>
+                {sectionOpen.categories ? 'Recolher' : 'Ajustar categorias'}
+              </button>
+            </div>
+
+            {sectionOpen.categories && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input className="input-field w-full" placeholder="Nome da categoria" value={categoryForm.name} onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
+                  <select className="input-field w-full" value={categoryForm.type} onChange={(e) => setCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
+                    <option value="expense">Despesa</option>
+                    <option value="income">Receita</option>
+                  </select>
+                  <select className="input-field w-full" value={categoryForm.icon} onChange={(e) => setCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
+                    {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+                      <option key={emoji.value} value={emoji.value}>{emoji.value} {emoji.label}</option>
+                    ))}
+                  </select>
+                  <input className="input-field w-full" type="color" value={categoryForm.color} onChange={(e) => setCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
+                  <input className="input-field w-full md:col-span-2" placeholder="Descrição (opcional)" value={categoryForm.description} onChange={(e) => setCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
+                </div>
+
+                <button className="btn btn-primary" type="button" onClick={handleCreateCategory} disabled={!canEdit}>
+                  Incluir categoria
+                </button>
+
+                {categoriesLoading ? (
+                  <p className="text-sm text-gray-600">Carregando categorias...</p>
+                ) : categories.length === 0 ? (
+                  <p className="text-sm text-gray-600">Nenhuma categoria cadastrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {categories.map((c) => (
+                      <div key={c.id} className="border rounded p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm">
+                            <div className="font-medium flex items-center gap-2">
+                              <span>{c.icon || '💰'}</span>
+                              <span>{c.name}</span>
+                            </div>
+                            <div className="text-gray-600">{c.type === 'income' ? 'Receita' : 'Despesa'}</div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button className="btn btn-secondary" type="button" onClick={() => startEditCategory(c)} disabled={!canEdit}>Editar</button>
+                            <button className="btn btn-secondary" type="button" onClick={() => handleDeleteCategory(c.id)} disabled={!canEdit}>Excluir</button>
+                          </div>
+                        </div>
+
+                        {editingCategoryId === c.id && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <input className="input-field w-full" value={editingCategoryForm.name} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
+                            <select className="input-field w-full" value={editingCategoryForm.type} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
+                              <option value="expense">Despesa</option>
+                              <option value="income">Receita</option>
+                            </select>
+                            <select className="input-field w-full" value={editingCategoryForm.icon} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
+                              {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
+                                <option key={`edit-opt-${emoji.value}`} value={emoji.value}>{emoji.value} {emoji.label}</option>
+                              ))}
+                            </select>
+                            <input className="input-field w-full" type="color" value={editingCategoryForm.color} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
+                            <input className="input-field w-full md:col-span-2" value={editingCategoryForm.description} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
+                            <div className="md:col-span-2 flex gap-2">
+                              <button className="btn btn-primary" type="button" onClick={handleSaveCategoryEdit} disabled={!canEdit}>Salvar</button>
+                              <button className="btn btn-secondary" type="button" onClick={() => setEditingCategoryId('')}>Cancelar</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!canEdit && <p className="text-sm text-gray-500">Somente admin/manager pode alterar categorias.</p>}
+              </>
+            )}
           </div>
         </div>
       ) : loading ? (

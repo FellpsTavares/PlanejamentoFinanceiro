@@ -15,7 +15,7 @@ export default function Sidebar() {
         icon: '💳',
         active: location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/transactions'),
         items: [
-          { to: '/dashboard', label: 'Dashboard' },
+          { to: '/dashboard', label: 'Painel' },
           { to: '/transactions', label: 'Transações' },
           { to: '/transactions/new', label: 'Nova Transação' },
           { to: '/assistant', label: 'Assistente IA' },
@@ -30,7 +30,7 @@ export default function Sidebar() {
         icon: '📈',
         active: location.pathname.startsWith('/investments'),
         items: [
-          { to: '/investments/dashboard', label: 'Dashboard' },
+          { to: '/investments/dashboard', label: 'Painel' },
           { to: '/investments', label: 'Ativos' },
           { to: '/investments/recommendations', label: 'Ativos Indicados' },
         ],
@@ -44,7 +44,7 @@ export default function Sidebar() {
         icon: '🚚',
         active: location.pathname.startsWith('/transport'),
         items: [
-          { to: '/transport/dashboard', label: 'Dashboard' },
+          { to: '/transport/dashboard', label: 'Painel' },
           { to: '/transport/trips', label: 'Gerenciar Viagens' },
           { to: '/transport/vehicles', label: 'Veículos' },
           { to: '/transport/trips/new', label: 'Nova Viagem' },

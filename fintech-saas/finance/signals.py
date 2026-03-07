@@ -1,8 +1,10 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .models import RecurringTransaction, Transaction
+from accounts.models import Tenant
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
+from .defaults import ensure_default_payment_methods
 
 
 @receiver(post_save, sender=RecurringTransaction)
@@ -34,3 +36,13 @@ def create_installments(sender, instance, created, **kwargs):
             date += timedelta(days=15)
         elif instance.frequency == 'weekly':
             date += timedelta(weeks=1)
+
+
+@receiver(post_save, sender=Tenant)
+def create_default_payment_methods_for_tenant(sender, instance, created, **kwargs):
+    """Ao criar tenant, garante formas de pagamento padrao.
+    """
+    if not created:
+        return
+
+    ensure_default_payment_methods(instance)

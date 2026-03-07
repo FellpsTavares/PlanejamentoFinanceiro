@@ -82,6 +82,9 @@ class RecurringTransaction(models.Model):
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
     installments_count = models.PositiveIntegerField(default=1)
     start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    due_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_fixed_monthly = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -107,6 +110,62 @@ class Investment(models.Model):
 
     def __str__(self):
         return f"{self.ticker} - {self.quantity}"
+
+
+class PaymentMethod(models.Model):
+    TYPE_CHOICES = [
+        ('cash', _('Dinheiro')),
+        ('pix', _('PIX')),
+        ('debit_card', _('Cartão de Débito')),
+        ('credit_card', _('Cartão de Crédito')),
+        ('bank_transfer', _('Transferência')),
+        ('other', _('Outros')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='payment_methods')
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='other')
+    due_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    closing_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('Forma de pagamento')
+        verbose_name_plural = _('Formas de pagamento')
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_type_display()})"
+
+
+class CreditCardInvoice(models.Model):
+    STATUS_CHOICES = [
+        ('open', _('Aberta')),
+        ('paid', _('Paga')),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='credit_card_invoices')
+    payment_method = models.ForeignKey(PaymentMethod, on_delete=models.CASCADE, related_name='invoices')
+    reference_month = models.DateField(verbose_name=_('Mês de referência'))
+    due_date = models.DateField(verbose_name=_('Vencimento'))
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='open')
+    paid_at = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('Fatura de cartão')
+        verbose_name_plural = _('Faturas de cartão')
+        ordering = ['-reference_month', '-created_at']
+        unique_together = ('tenant', 'payment_method', 'reference_month')
+
+    def __str__(self):
+        return f"{self.payment_method.name} - {self.reference_month.strftime('%m/%Y')}"
 
 
 class Transaction(models.Model):
@@ -152,6 +211,22 @@ class Transaction(models.Model):
         related_name='transactions',
         verbose_name=_('Categoria')
     )
+    payment_method = models.ForeignKey(
+        PaymentMethod,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        verbose_name=_('Forma de Pagamento')
+    )
+    credit_card_invoice = models.ForeignKey(
+        CreditCardInvoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        verbose_name=_('Fatura de Cartão')
+    )
     
     # Datas
     transaction_date = models.DateField(verbose_name=_('Data da Transação'))
@@ -168,6 +243,7 @@ class Transaction(models.Model):
         default='completed',
         verbose_name=_('Status')
     )
+    affects_balance = models.BooleanField(default=True, verbose_name=_('Impacta Saldo'))
     
     # Notas
     notes = models.TextField(blank=True, verbose_name=_('Notas'))

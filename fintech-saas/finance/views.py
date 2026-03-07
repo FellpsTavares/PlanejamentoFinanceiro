@@ -6,17 +6,20 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
+from calendar import monthrange
 from io import BytesIO
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from accounts.audit import log_tenant_action
-from .models import Category, Transaction, RecurringTransaction, Investment
+from .models import Category, Transaction, RecurringTransaction, Investment, PaymentMethod, CreditCardInvoice
+from .defaults import ensure_default_payment_methods
 from .services.yfinance_service import get_current_price, get_current_prices_bulk, get_asset_quote, search_assets, get_recommended_assets
 from transport.models import Vehicle, Trip, TransportRevenue, TransportExpense
 from .serializers import (
     CategorySerializer, TransactionSerializer,
     TransactionListSerializer, TransactionCreateUpdateSerializer,
-    TransactionSummarySerializer, RecurringTransactionSerializer, InvestmentSerializer
+    TransactionSummarySerializer, RecurringTransactionSerializer, InvestmentSerializer,
+    PaymentMethodSerializer, CreditCardInvoiceSerializer
 )
 
 
@@ -107,7 +110,57 @@ class TransactionViewSet(viewsets.ModelViewSet):
         return Transaction.objects.filter(
             tenant=self.request.user.tenant,
             user=self.request.user
-        ).select_related('category', 'user')
+        ).select_related('category', 'user', 'payment_method', 'credit_card_invoice')
+
+    def _get_credit_card_invoice(self, transaction_obj):
+        payment_method = transaction_obj.payment_method
+        if not payment_method or payment_method.type != 'credit_card':
+            return None
+
+        tx_date = transaction_obj.transaction_date or date.today()
+        reference_month = tx_date.replace(day=1)
+
+        due_day = int(payment_method.due_day or 10)
+        last_day = monthrange(reference_month.year, reference_month.month)[1]
+        due_day = min(max(due_day, 1), last_day)
+        due_date = reference_month.replace(day=due_day)
+
+        invoice, _ = CreditCardInvoice.objects.get_or_create(
+            tenant=transaction_obj.tenant,
+            payment_method=payment_method,
+            reference_month=reference_month,
+            defaults={
+                'due_date': due_date,
+                'status': 'open',
+            },
+        )
+        return invoice
+
+    def _recalculate_invoice_total(self, invoice):
+        if not invoice:
+            return
+        total = invoice.transactions.filter(type='expense').aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        invoice.total_amount = total
+        invoice.save(update_fields=['total_amount', 'updated_at'])
+
+    def _process_credit_card_transaction(self, transaction_obj):
+        payment_method = transaction_obj.payment_method
+        if not payment_method or payment_method.type != 'credit_card' or transaction_obj.type != 'expense':
+            if transaction_obj.credit_card_invoice_id:
+                old_invoice = transaction_obj.credit_card_invoice
+                transaction_obj.credit_card_invoice = None
+                transaction_obj.affects_balance = True
+                transaction_obj.save(update_fields=['credit_card_invoice', 'affects_balance', 'updated_at'])
+                self._recalculate_invoice_total(old_invoice)
+            return
+
+        invoice = self._get_credit_card_invoice(transaction_obj)
+        transaction_obj.credit_card_invoice = invoice
+        transaction_obj.affects_balance = False
+        transaction_obj.status = 'pending'
+        transaction_obj.due_date = invoice.due_date
+        transaction_obj.save(update_fields=['credit_card_invoice', 'affects_balance', 'status', 'due_date', 'updated_at'])
+        self._recalculate_invoice_total(invoice)
     
     def get_serializer_class(self):
         """Usa serializer diferente para cada ação"""
@@ -119,17 +172,19 @@ class TransactionViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Cria transação associada ao usuário e tenant atual"""
-        serializer.save(
+        tx = serializer.save(
             tenant=self.request.user.tenant,
             user=self.request.user
         )
+        self._process_credit_card_transaction(tx)
     
     def perform_update(self, serializer):
         """Atualiza transação"""
-        serializer.save(
+        tx = serializer.save(
             tenant=self.request.user.tenant,
             user=self.request.user
         )
+        self._process_credit_card_transaction(tx)
     
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -139,7 +194,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         - start_date: Data inicial (YYYY-MM-DD)
         - end_date: Data final (YYYY-MM-DD)
         """
-        queryset = self.get_queryset()
+        queryset = self.get_queryset().filter(affects_balance=True)
         
         # Filtrar por datas se fornecidas
         start_date = request.query_params.get('start_date')
@@ -233,8 +288,90 @@ class RecurringTransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return RecurringTransaction.objects.filter(tenant=self.request.user.tenant)
 
+    def _monthly_dates(self, start_date, end_date, due_day):
+        current = start_date.replace(day=1)
+        end_month = end_date.replace(day=1)
+        while current <= end_month:
+            last_day = monthrange(current.year, current.month)[1]
+            day = min(max(int(due_day), 1), last_day)
+            yield current.replace(day=day)
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1)
+            else:
+                current = current.replace(month=current.month + 1)
+
+    def _generate_fixed_monthly_transactions(self, recurring):
+        if not recurring.is_fixed_monthly or not recurring.end_date or recurring.due_day is None:
+            return
+
+        for due in self._monthly_dates(recurring.start_date, recurring.end_date, recurring.due_day):
+            exists = Transaction.objects.filter(
+                tenant=recurring.tenant,
+                recurring=recurring,
+                due_date=due,
+            ).exists()
+            if exists:
+                continue
+
+            Transaction.objects.create(
+                tenant=recurring.tenant,
+                user=recurring.user,
+                description=recurring.description,
+                amount=recurring.amount,
+                type=recurring.type,
+                category=recurring.category,
+                transaction_date=due,
+                due_date=due,
+                status='pending',
+                affects_balance=True,
+                is_recurring=True,
+                recurrence_type='monthly',
+                recurring=recurring,
+            )
+
     def perform_create(self, serializer):
-        serializer.save(tenant=self.request.user.tenant, user=self.request.user)
+        recurring = serializer.save(tenant=self.request.user.tenant, user=self.request.user)
+        self._generate_fixed_monthly_transactions(recurring)
+
+
+class PaymentMethodViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentMethodSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Garante métodos básicos para tenants antigos e novos sem duplicar registros.
+        ensure_default_payment_methods(self.request.user.tenant)
+        return PaymentMethod.objects.filter(tenant=self.request.user.tenant).order_by('name')
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=self.request.user.tenant)
+
+
+class CreditCardInvoiceViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CreditCardInvoiceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return CreditCardInvoice.objects.filter(tenant=self.request.user.tenant).select_related('payment_method')
+
+    @action(detail=True, methods=['post'], url_path='mark-paid')
+    def mark_paid(self, request, pk=None):
+        invoice = self.get_object()
+        if invoice.status == 'paid':
+            return Response({'detail': 'Fatura já está marcada como paga.'})
+
+        paid_date = parse_date(request.data.get('paid_at') or '') or date.today()
+        invoice.status = 'paid'
+        invoice.paid_at = paid_date
+        invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
+
+        invoice.transactions.filter(type='expense').update(
+            affects_balance=True,
+            status='completed',
+            due_date=paid_date,
+        )
+
+        return Response({'detail': 'Fatura marcada como paga com sucesso.'})
 
 
 class InvestmentViewSet(viewsets.ModelViewSet):

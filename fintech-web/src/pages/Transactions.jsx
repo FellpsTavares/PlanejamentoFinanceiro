@@ -15,6 +15,7 @@ export default function Transactions() {
     end_date: '',
   });
   const [categories, setCategories] = useState([]);
+  const [creditCardInvoices, setCreditCardInvoices] = useState([]);
 
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -33,6 +34,9 @@ export default function Transactions() {
       // Carregar categorias
       const categoriesData = await transactionService.listCategories();
       setCategories(categoriesData.results || categoriesData);
+
+      const invoicesData = await transactionService.listCreditCardInvoices();
+      setCreditCardInvoices(invoicesData.results || invoicesData || []);
 
       // Carregar transações
       await loadTransactions();
@@ -80,6 +84,18 @@ export default function Transactions() {
       } catch (err) {
         setError('Erro ao deletar transação');
       }
+    }
+  };
+
+  const handleMarkInvoicePaid = async (invoiceId) => {
+    const paidAt = new Date().toISOString().split('T')[0];
+    if (!window.confirm('Marcar esta fatura como paga hoje?')) return;
+
+    try {
+      await transactionService.markCreditCardInvoicePaid(invoiceId, paidAt);
+      await loadData();
+    } catch (err) {
+      setError('Erro ao marcar fatura como paga');
     }
   };
 
@@ -188,6 +204,55 @@ export default function Transactions() {
         </div>
 
         {/* Lista de Transações */}
+        <div className="card mb-8">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Faturas de Cartão</h2>
+          {creditCardInvoices.length === 0 ? (
+            <p className="text-sm text-gray-600">Nenhuma fatura de cartão encontrada.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100 border-b">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Cartão</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Referência</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Vencimento</th>
+                    <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">Total</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">Status</th>
+                    <th className="px-4 py-2 text-center text-sm font-semibold text-gray-700">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {creditCardInvoices.map((invoice) => (
+                    <tr key={invoice.id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">{invoice.payment_method_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{new Date(invoice.reference_month).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{new Date(invoice.due_date).toLocaleDateString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-sm text-right font-semibold text-red-600">{formatBRL(invoice.total_amount)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {invoice.status === 'paid' ? 'Paga' : 'Aberta'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-center">
+                        {invoice.status === 'open' ? (
+                          <button
+                            onClick={() => handleMarkInvoicePaid(invoice.id)}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            Marcar como paga
+                          </button>
+                        ) : (
+                          <span className="text-gray-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
         <div className="card">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             Transações ({transactions.length})
@@ -211,6 +276,9 @@ export default function Transactions() {
                     </th>
                     <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
                       Tipo
+                    </th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold text-gray-700">
+                      Pagamento
                     </th>
                     <th className="px-4 py-2 text-right text-sm font-semibold text-gray-700">
                       Valor
@@ -243,6 +311,12 @@ export default function Transactions() {
                         }`}>
                           {transaction.type === 'income' ? 'Receita' : 'Despesa'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {transaction.payment_method_name || '—'}
+                        {transaction.affects_balance === false && (
+                          <div className="text-xs text-amber-700">Não impacta saldo (fatura aberta)</div>
+                        )}
                       </td>
                       <td className={`px-4 py-3 text-sm font-bold text-right ${
                         transaction.type === 'income' ? 'text-green-600' : 'text-red-600'

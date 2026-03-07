@@ -42,8 +42,8 @@ export default function TransportDashboard() {
         setRevenuesTotal(revTotal);
         setExpensesTotal(expTotal);
       } catch (err) {
-        console.error('Erro ao carregar dashboard de transportes', err);
-        toast('Erro ao carregar dashboard da transportadora', 'error');
+        console.error('Erro ao carregar painel de transportes', err);
+        toast('Erro ao carregar painel da transportadora', 'error');
       } finally {
         setLoading(false);
       }
@@ -51,13 +51,13 @@ export default function TransportDashboard() {
     load();
   }, []);
 
-  if (loading) return <div className="p-6">Carregando dashboard...</div>;
+  if (loading) return <div className="p-6">Carregando painel...</div>;
 
   const netProfit = revenuesTotal - expensesTotal;
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold">Transportadora - Dashboard</h1>
+      <h1 className="text-2xl font-bold">Transportadora - Painel</h1>
       <p className="mt-2 text-gray-600">Visão geral operacional e financeira.</p>
 
       <div className="mt-4 flex gap-2">

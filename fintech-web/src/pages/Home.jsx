@@ -162,7 +162,7 @@ export default function Home() {
       title: 'Finanças',
       description: 'Acesse transações e visão financeira principal.',
       links: [
-        { to: '/dashboard', label: 'Dashboard' },
+        { to: '/dashboard', label: 'Painel' },
         { to: '/transactions', label: 'Transações' },
         { to: '/transactions/new', label: 'Nova Transação' },
       ],
@@ -173,7 +173,7 @@ export default function Home() {
       title: 'Transportadora',
       description: 'Gerencie veículos e viagens em andamento.',
       links: [
-        { to: '/transport/dashboard', label: 'Dashboard' },
+        { to: '/transport/dashboard', label: 'Painel' },
         { to: '/transport/trips', label: 'Gerenciar Viagens' },
         { to: '/transport/vehicles', label: 'Veículos' },
       ],
@@ -184,7 +184,7 @@ export default function Home() {
       title: 'Investimentos',
       description: 'Acompanhe carteira e indicadores de ativos.',
       links: [
-        { to: '/investments/dashboard', label: 'Dashboard' },
+        { to: '/investments/dashboard', label: 'Painel' },
         { to: '/investments', label: 'Ativos' },
       ],
       enabled: Boolean(user?.tenant?.has_module_investments),

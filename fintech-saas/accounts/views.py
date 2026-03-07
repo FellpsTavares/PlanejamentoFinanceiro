@@ -253,6 +253,7 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         module = (request.query_params.get('module') or request.data.get('module') or '').strip().lower()
         if module not in [
             TenantParameter.MODULE_GENERAL,
+            TenantParameter.MODULE_FINANCE,
             TenantParameter.MODULE_TRANSPORT,
             TenantParameter.MODULE_INVESTMENTS,
         ]:
