@@ -11,13 +11,14 @@ export default function Sidebar() {
     const list = [
       {
         key: 'initial',
-        label: 'Inicial',
-        icon: '⌂',
+        label: 'Finanças',
+        icon: '💳',
         active: location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/transactions'),
         items: [
           { to: '/dashboard', label: 'Dashboard' },
           { to: '/transactions', label: 'Transações' },
           { to: '/transactions/new', label: 'Nova Transação' },
+          { to: '/assistant', label: 'Assistente IA' },
         ],
       },
     ];
@@ -26,11 +27,12 @@ export default function Sidebar() {
       list.push({
         key: 'investments',
         label: 'Investimentos',
-        icon: '↗',
+        icon: '📈',
         active: location.pathname.startsWith('/investments'),
         items: [
           { to: '/investments/dashboard', label: 'Dashboard' },
           { to: '/investments', label: 'Ativos' },
+          { to: '/investments/recommendations', label: 'Ativos Indicados' },
         ],
       });
     }

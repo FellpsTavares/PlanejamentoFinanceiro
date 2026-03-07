@@ -10,6 +10,7 @@ import Transactions from './pages/Transactions';
 import NewTransaction from './pages/NewTransaction';
 import Investments from './pages/Investments';
 import InvestmentsDashboard from './pages/InvestmentsDashboard';
+import InvestmentsRecommendations from './pages/InvestmentsRecommendations';
 import ModuleRoute from './components/ModuleRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
 import TransportDashboard from './pages/TransportDashboard';
@@ -20,6 +21,7 @@ import TransportTripNew from './pages/TransportTripNew';
 import TransportTrips from './pages/TransportTrips';
 import AdminTenants from './pages/AdminTenants';
 import ModuleSettings from './pages/ModuleSettings';
+import AssistantChat from './pages/AssistantChat';
 
 export default function App() {
   useEffect(() => {
@@ -89,6 +91,16 @@ export default function App() {
           }
         />
         <Route
+          path="/investments/recommendations"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_investments">
+                <InvestmentsRecommendations />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/tenants"
           element={
             <ProtectedRoute>
@@ -103,6 +115,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ModuleSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/assistant"
+          element={
+            <ProtectedRoute>
+              <AssistantChat />
             </ProtectedRoute>
           }
         />

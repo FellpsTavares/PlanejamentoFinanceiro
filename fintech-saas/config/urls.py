@@ -37,4 +37,6 @@ urlpatterns = [
     path('api/auth/', include('rest_framework.urls')),
     # Transporte (módulo separado)
     path('api/transport/', include('transport.urls')),
+    # Assistente operacional (chat)
+    path('api/assistant/', include('finance.assistant_urls')),
 ]

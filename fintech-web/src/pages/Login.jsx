@@ -26,7 +26,7 @@ export default function Login() {
 
     try {
       await authService.login(formData.email, formData.password);
-      navigate('/dashboard');
+      navigate('/home');
     } catch (err) {
       setError(err.response?.data?.detail || 'Erro ao fazer login');
     } finally {

@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { reportsService } from '../services/reports';
 import { transportService } from '../services/transport';
+import { investmentsMarketService } from '../services/investmentsMarket';
 import { toast } from '../utils/toast';
 
 const REPORT_CONFIGS = {
   initial: {
-    title: 'Inicial',
+    title: 'Finanças',
     fields: [
       { key: 'transaction_date', label: 'Data' },
       { key: 'description', label: 'Descrição' },
@@ -101,6 +102,18 @@ export default function Home() {
     loadVehicles();
   }, [user]);
 
+  useEffect(() => {
+    const warmInvestments = async () => {
+      if (!user?.tenant?.has_module_investments) return;
+      try {
+        await investmentsMarketService.warmForCurrentPortfolio();
+      } catch (err) {
+        // warming de cache nao deve quebrar a home
+      }
+    };
+    warmInvestments();
+  }, [user]);
+
   const handleOpenReports = (moduleKey) => {
     setActiveReportModule(moduleKey);
   };
@@ -146,7 +159,7 @@ export default function Home() {
   const modules = [
     {
       key: 'initial',
-      title: 'Inicial',
+      title: 'Finanças',
       description: 'Acesse transações e visão financeira principal.',
       links: [
         { to: '/dashboard', label: 'Dashboard' },

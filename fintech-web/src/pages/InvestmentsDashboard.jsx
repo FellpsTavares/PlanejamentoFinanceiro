@@ -1,20 +1,74 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../services/api';
+import { investmentsMarketService } from '../services/investmentsMarket';
 
 export default function InvestmentsDashboard() {
   const [investments, setInvestments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [error, setError] = useState('');
+  const tickersRef = useRef([]);
 
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   useEffect(() => {
+    tickersRef.current = (investments || []).map((item) => item.ticker).filter(Boolean);
+  }, [investments]);
+
+  useEffect(() => {
+    const fetchLivePrices = async (tickers) => {
+      const dedup = Array.from(new Set((tickers || []).map((item) => String(item).trim().toUpperCase()).filter(Boolean)));
+      if (dedup.length === 0) return;
+
+      const cached = investmentsMarketService.getCachedPrices(dedup);
+      if (Object.keys(cached).length > 0) {
+        setInvestments((prev) => prev.map((inv) => {
+          const key = String(inv.ticker || '').toUpperCase();
+          if (!Object.prototype.hasOwnProperty.call(cached, key)) return inv;
+          const current = cached[key];
+          const buyPrice = Number(inv.buy_price || 0);
+          const qty = Number(inv.quantity || 0);
+          const pnl = current === null || current === undefined ? null : (Number(current) - buyPrice) * qty;
+          return {
+            ...inv,
+            current_price: current,
+            pnl,
+          };
+        }));
+      }
+
+      setLoadingQuotes(true);
+      try {
+        const quoteMap = await investmentsMarketService.fetchLivePrices(dedup);
+
+        setInvestments((prev) => prev.map((inv) => {
+          const key = String(inv.ticker || '').toUpperCase();
+          const current = quoteMap[key];
+          const buyPrice = Number(inv.buy_price || 0);
+          const qty = Number(inv.quantity || 0);
+          const pnl = current === null || current === undefined ? null : (Number(current) - buyPrice) * qty;
+
+          return {
+            ...inv,
+            current_price: current,
+            pnl,
+          };
+        }));
+      } catch (err) {
+        console.error('Erro ao atualizar cotacoes no dashboard', err);
+      } finally {
+        setLoadingQuotes(false);
+      }
+    };
+
     const load = async () => {
       setLoading(true);
       setError('');
       try {
-        const res = await api.get('/investments/');
-        setInvestments(res.data || []);
+        const res = await api.get('/investments/', { params: { include_live: 0 } });
+        const base = res.data || [];
+        setInvestments(base);
+        await fetchLivePrices(base.map((item) => item.ticker));
       } catch (err) {
         console.error('Erro ao carregar dashboard de investimentos', err);
         setError('Erro ao carregar dashboard de investimentos.');
@@ -24,6 +78,12 @@ export default function InvestmentsDashboard() {
     };
 
     load();
+
+    const intervalId = setInterval(() => {
+      fetchLivePrices(tickersRef.current);
+    }, 30000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const metrics = useMemo(() => {
@@ -51,6 +111,7 @@ export default function InvestmentsDashboard() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-4">Dashboard de Investimentos</h1>
+      {loadingQuotes && <p className="mb-3 text-xs text-slate-500">Atualizando cotacoes em tempo real...</p>}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="p-4 border rounded bg-white">

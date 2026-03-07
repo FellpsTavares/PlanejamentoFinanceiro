@@ -11,7 +11,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from accounts.audit import log_tenant_action
 from .models import Category, Transaction, RecurringTransaction, Investment
-from .services.brapi_service import get_current_price
+from .services.yfinance_service import get_current_price, get_current_prices_bulk, get_asset_quote, search_assets, get_recommended_assets
 from transport.models import Vehicle, Trip, TransportRevenue, TransportExpense
 from .serializers import (
     CategorySerializer, TransactionSerializer,
@@ -249,22 +249,75 @@ class InvestmentViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
+        include_live = str(request.query_params.get('include_live') or '0').lower() in {'1', 'true', 'yes'}
+        tickers = [inv.ticker for inv in queryset]
+        prices = get_current_prices_bulk(tickers) if include_live else {}
         data = []
         for inv in queryset:
-            current = get_current_price(inv.ticker)
+            current = prices.get(inv.ticker) if include_live else None
             pnl = None
             if current is not None:
                 pnl = (float(current) - float(inv.buy_price)) * float(inv.quantity)
             data.append({
                 'id': str(inv.id),
                 'ticker': inv.ticker,
+                'asset_name': inv.ticker,
                 'buy_price': float(inv.buy_price),
                 'quantity': float(inv.quantity),
                 'buy_date': inv.buy_date,
                 'current_price': current,
                 'pnl': pnl,
+                'pnl_percent': ((float(current) / float(inv.buy_price) - 1) * 100.0) if current is not None and float(inv.buy_price) else None,
+                'currency': None,
+                'as_of': None,
             })
         return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='live-prices')
+    def live_prices(self, request):
+        tickers_param = (request.query_params.get('tickers') or '').strip()
+        if tickers_param:
+            tickers = [t.strip().upper() for t in tickers_param.split(',') if t.strip()]
+        else:
+            tickers = list(self.get_queryset().values_list('ticker', flat=True))
+
+        prices = get_current_prices_bulk(tickers)
+        return Response([
+            {'ticker': ticker, 'current_price': prices.get(ticker)}
+            for ticker in tickers
+        ])
+
+    @action(detail=False, methods=['get'], url_path='asset-search')
+    def asset_search(self, request):
+        query = (request.query_params.get('q') or '').strip()
+        if len(query) < 2:
+            return Response([])
+
+        suggestions = search_assets(query=query, limit=10)
+        return Response(suggestions)
+
+    @action(detail=False, methods=['get'], url_path='quote')
+    def quote(self, request):
+        ticker = (request.query_params.get('ticker') or '').strip()
+        if not ticker:
+            return Response({'detail': 'Parâmetro ticker é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        quote_data = get_asset_quote(ticker)
+        if not quote_data or quote_data.get('price') is None:
+            return Response({'detail': 'Cotação indisponível para o ativo informado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(quote_data)
+
+    @action(detail=False, methods=['get'], url_path='recommended-assets')
+    def recommended_assets(self, request):
+        limit_param = request.query_params.get('limit') or '8'
+        try:
+            limit = max(1, min(int(limit_param), 20))
+        except (TypeError, ValueError):
+            limit = 8
+
+        items = get_recommended_assets(limit=limit)
+        return Response(items)
     
     @action(detail=False, methods=['get'])
     def by_date_range(self, request):
@@ -581,10 +634,13 @@ class ReportViewSet(viewsets.ViewSet):
         total_current = Decimal('0')
         rows = []
 
-        for inv in investments[:40]:
+        investment_rows = list(investments[:40])
+        prices = get_current_prices_bulk([inv.ticker for inv in investment_rows])
+
+        for inv in investment_rows:
             buy_total = (inv.buy_price or Decimal('0')) * (inv.quantity or Decimal('0'))
             total_invested += buy_total
-            current_price = get_current_price(inv.ticker)
+            current_price = prices.get(inv.ticker)
             current_total = (Decimal(str(current_price)) * (inv.quantity or Decimal('0'))) if current_price is not None else buy_total
             total_current += current_total
             pnl = current_total - buy_total
