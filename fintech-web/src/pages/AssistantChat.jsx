@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { assistantService } from '../services/assistant';
 
 const INTENT_LABELS = {
@@ -79,23 +79,76 @@ const FIELD_SELECT_OPTIONS = {
   ],
 };
 
+const TEMPLATE_STORAGE_KEY = 'assistant_client_templates_v1';
+
+function getTodayIso() {
+  return new Date().toISOString().split('T')[0];
+}
+
 const CLIENT_PROMPT_SCRIPTS = [
   {
     key: 'trip-create',
-    title: 'Script padrão: Nova viagem',
-    text: 'Criar viagem para placa <PLACA> por tonelada <TONS> toneladas valor tonelada <VALOR_POR_TONELADA> com data <AAAA-MM-DD> descrição <DESCRICAO>.',
+    title: 'Template: Nova viagem',
+    template: 'Criar viagem para placa {{plate}} por tonelada {{tons}} toneladas valor tonelada {{rate_per_ton}} com data {{start_date}} descricao {{description}}.',
+    fields: [
+      { key: 'plate', label: 'Placa', type: 'text', required: true, placeholder: 'ABC1D23', defaultValue: '' },
+      { key: 'tons', label: 'Toneladas', type: 'number', required: true, placeholder: '20', defaultValue: '' },
+      { key: 'rate_per_ton', label: 'Valor por tonelada', type: 'number', required: true, placeholder: '220', defaultValue: '' },
+      { key: 'start_date', label: 'Data', type: 'date', required: true, defaultValue: getTodayIso() },
+      { key: 'description', label: 'Descricao', type: 'text', required: false, placeholder: 'Frete soja', defaultValue: 'Viagem via template' },
+    ],
   },
   {
     key: 'finance-expense',
-    title: 'Script padrão: Débito',
-    text: 'Lançar despesa no valor de <VALOR> na data <AAAA-MM-DD> com descrição <DESCRICAO>.',
+    title: 'Template: Debito',
+    template: 'Lancar despesa no valor de {{amount}} na data {{transaction_date}} com descricao {{description}}.',
+    fields: [
+      { key: 'amount', label: 'Valor', type: 'number', required: true, placeholder: '350', defaultValue: '' },
+      { key: 'transaction_date', label: 'Data', type: 'date', required: true, defaultValue: getTodayIso() },
+      { key: 'description', label: 'Descricao', type: 'text', required: true, placeholder: 'Combustivel', defaultValue: '' },
+    ],
   },
   {
     key: 'finance-income',
-    title: 'Script padrão: Receita',
-    text: 'Lançar receita no valor de <VALOR> na data <AAAA-MM-DD> com descrição <DESCRICAO>.',
+    title: 'Template: Receita',
+    template: 'Lancar receita no valor de {{amount}} na data {{transaction_date}} com descricao {{description}}.',
+    fields: [
+      { key: 'amount', label: 'Valor', type: 'number', required: true, placeholder: '1200', defaultValue: '' },
+      { key: 'transaction_date', label: 'Data', type: 'date', required: true, defaultValue: getTodayIso() },
+      { key: 'description', label: 'Descricao', type: 'text', required: true, placeholder: 'Pagamento frete', defaultValue: '' },
+    ],
   },
 ];
+
+function getDefaultTemplateValues() {
+  return CLIENT_PROMPT_SCRIPTS.reduce((acc, script) => {
+    acc[script.key] = (script.fields || []).reduce((fieldAcc, field) => {
+      fieldAcc[field.key] = field.defaultValue ?? '';
+      return fieldAcc;
+    }, {});
+    return acc;
+  }, {});
+}
+
+function loadTemplateValues() {
+  const defaults = getDefaultTemplateValues();
+  try {
+    const raw = localStorage.getItem(TEMPLATE_STORAGE_KEY);
+    if (!raw) return defaults;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return defaults;
+
+    const merged = { ...defaults };
+    Object.keys(defaults).forEach((scriptKey) => {
+      const current = parsed[scriptKey] || {};
+      merged[scriptKey] = { ...defaults[scriptKey], ...current };
+    });
+    return merged;
+  } catch (err) {
+    return defaults;
+  }
+}
 
 const NUMERIC_FIELDS = new Set(['tons', 'rate_per_ton', 'days', 'daily_rate', 'amount']);
 
@@ -155,6 +208,15 @@ export default function AssistantChat() {
   const [info, setInfo] = useState('');
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
+  const [templateValues, setTemplateValues] = useState(() => loadTemplateValues());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templateValues));
+    } catch (err) {
+      // ignore localStorage write errors
+    }
+  }, [templateValues]);
 
   const computedMissingFields = useMemo(() => {
     if (!result) return [];
@@ -219,29 +281,58 @@ export default function AssistantChat() {
     return String(value);
   };
 
-  const applyScript = (text) => {
-    setMessage(text);
-    setInfo('Script aplicado no campo de mensagem. Edite os placeholders e clique em Enviar.');
+  const buildTemplateText = (script) => {
+    const values = templateValues?.[script.key] || {};
+    let text = script.template;
+    (script.fields || []).forEach((field) => {
+      const value = values[field.key] ?? '';
+      text = text.replace(`{{${field.key}}}`, String(value).trim());
+    });
+    return text.replace(/\s+/g, ' ').trim();
   };
 
-  const copyScript = async (text) => {
+  const getTemplateMissingFields = (script) => {
+    const values = templateValues?.[script.key] || {};
+    return (script.fields || [])
+      .filter((field) => field.required && isEmpty(values[field.key]))
+      .map((field) => field.label);
+  };
+
+  const updateTemplateField = (scriptKey, fieldKey, value) => {
+    setTemplateValues((prev) => ({
+      ...prev,
+      [scriptKey]: {
+        ...(prev?.[scriptKey] || {}),
+        [fieldKey]: value,
+      },
+    }));
+  };
+
+  const applyScript = (script) => {
+    const built = buildTemplateText(script);
+    setMessage(built);
+    setInfo('Template aplicado no campo de mensagem com os dados preenchidos.');
+  };
+
+  const copyScript = async (script) => {
+    const built = buildTemplateText(script);
     try {
-      await navigator.clipboard.writeText(text);
-      setInfo('Script copiado para a área de transferência.');
+      await navigator.clipboard.writeText(built);
+      setInfo('Template preenchido copiado para a área de transferência.');
     } catch (err) {
       setInfo('Não foi possível copiar automaticamente. Selecione e copie manualmente.');
     }
   };
 
-  const handleParse = async (e) => {
-    e.preventDefault();
-    if (!message.trim()) return;
+  const parseMessage = async (rawMessage) => {
+    const finalMessage = (rawMessage || '').trim();
+    if (!finalMessage) return;
 
     setLoadingParse(true);
     setError('');
     setInfo('');
     try {
-      const parsed = await assistantService.parse(message.trim());
+      const parsed = await assistantService.parse(finalMessage);
       setResult({ ...parsed, draft: parsed?.draft || {} });
       const resumo = [
         `Ação identificada: ${INTENT_LABELS[parsed.intent] || parsed.intent}`,
@@ -251,7 +342,7 @@ export default function AssistantChat() {
           : 'Tudo certo, já pode confirmar e executar.',
       ].join('\n');
 
-      setHistory((prev) => [...prev, { type: 'user', text: message.trim() }, { type: 'assistant', text: resumo }]);
+      setHistory((prev) => [...prev, { type: 'user', text: finalMessage }, { type: 'assistant', text: resumo }]);
       setMessage('');
     } catch (err) {
       console.error(err);
@@ -259,6 +350,21 @@ export default function AssistantChat() {
     } finally {
       setLoadingParse(false);
     }
+  };
+
+  const parseTemplate = async (script) => {
+    const missing = getTemplateMissingFields(script);
+    if (missing.length > 0) {
+      setError(`Preencha os campos obrigatórios do template: ${missing.join(', ')}`);
+      return;
+    }
+    const built = buildTemplateText(script);
+    await parseMessage(built);
+  };
+
+  const handleParse = async (e) => {
+    e.preventDefault();
+    await parseMessage(message);
   };
 
   const handleExecute = async () => {
@@ -290,26 +396,54 @@ export default function AssistantChat() {
       </div>
 
       <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900 mb-3">Scripts padrão para clientes</h2>
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">Templates padrão para clientes</h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {CLIENT_PROMPT_SCRIPTS.map((script) => (
             <article key={script.key} className="rounded-lg border border-slate-200 p-3">
               <h3 className="text-sm font-semibold text-slate-900">{script.title}</h3>
-              <p className="mt-2 text-xs text-slate-600">{script.text}</p>
+              <p className="mt-2 text-xs text-slate-600">{script.template}</p>
+
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                {(script.fields || []).map((field) => (
+                  <label key={`${script.key}-${field.key}`} className="text-xs text-slate-700">
+                    <span className="mb-1 block">{field.label}{field.required ? ' *' : ''}</span>
+                    <input
+                      type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                      value={templateValues?.[script.key]?.[field.key] ?? ''}
+                      onChange={(e) => updateTemplateField(script.key, field.key, e.target.value)}
+                      placeholder={field.placeholder || ''}
+                      className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                      step={field.type === 'number' ? '0.01' : undefined}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-700">
+                <strong>Preview:</strong> {buildTemplateText(script)}
+              </div>
+
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => applyScript(script.text)}
+                  onClick={() => applyScript(script)}
                   className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
                 >
                   Usar no chat
                 </button>
                 <button
                   type="button"
-                  onClick={() => copyScript(script.text)}
+                  onClick={() => parseTemplate(script)}
+                  className="rounded-md border border-emerald-400 px-3 py-1.5 text-xs font-medium text-emerald-700"
+                >
+                  Interpretar template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copyScript(script)}
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
                 >
-                  Copiar script
+                  Copiar template
                 </button>
               </div>
             </article>

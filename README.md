@@ -1,2 +1,4 @@
 # PlanejamentoFinanceiro
-Projeto para a criação de um sistema de gestão financeira
+Projeto para a criação do sistema Elo Financeiro.
+
+Slogan: Conectando a sua empresa à eficiencia.

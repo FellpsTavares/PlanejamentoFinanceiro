@@ -13,6 +13,7 @@ import InvestmentsDashboard from './pages/InvestmentsDashboard';
 import InvestmentsRecommendations from './pages/InvestmentsRecommendations';
 import ModuleRoute from './components/ModuleRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
+import SuperUserRoute from './components/SuperUserRoute';
 import TransportDashboard from './pages/TransportDashboard';
 import TransportVehicles from './pages/TransportVehicles';
 import TransportVehicleProfile from './pages/TransportVehicleProfile';
@@ -21,7 +22,7 @@ import TransportTripNew from './pages/TransportTripNew';
 import TransportTrips from './pages/TransportTrips';
 import AdminTenants from './pages/AdminTenants';
 import ModuleSettings from './pages/ModuleSettings';
-import AssistantChat from './pages/AssistantChat';
+import AccountManagement from './pages/AccountManagement';
 
 export default function App() {
   useEffect(() => {
@@ -111,6 +112,16 @@ export default function App() {
           }
         />
         <Route
+          path="/admin/accounts"
+          element={
+            <ProtectedRoute>
+              <SuperUserRoute>
+                <AccountManagement />
+              </SuperUserRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/settings/modules"
           element={
             <ProtectedRoute>
@@ -118,15 +129,6 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/assistant"
-          element={
-            <ProtectedRoute>
-              <AssistantChat />
-            </ProtectedRoute>
-          }
-        />
-
         {/* Transport module routes - protegido por flag do tenant */}
         <Route
           path="/transport/dashboard"

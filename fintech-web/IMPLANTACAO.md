@@ -1,4 +1,4 @@
-# 📖 Manual de Implantação - FinManager Frontend
+# 📖 Manual de Implantação - Elo Financeiro Frontend
 
 Guia completo para importar, configurar e executar o Frontend React no VSCode.
 
@@ -167,7 +167,7 @@ Crie arquivo `.env`:
 
 ```env
 VITE_API_URL=http://localhost:8000/api
-VITE_APP_NAME=FinManager
+VITE_APP_NAME=Elo Financeiro
 ```
 
 Depois use no código:
@@ -718,4 +718,4 @@ Boa sorte! 🚀
 
 **Versão**: 1.0  
 **Data**: Fevereiro 2024  
-**Autor**: FinManager Development Team
+**Autor**: Elo Financeiro Development Team

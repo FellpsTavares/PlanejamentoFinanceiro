@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import APIException
 
 from finance.models import Category, Transaction
 from transport.models import Vehicle, Trip, TripMovement
@@ -20,6 +21,32 @@ AMOUNT_REGEX = re.compile(r'(?<!\d)(\d{1,3}(?:[\.,]\d{3})*(?:[\.,]\d{1,2})|\d+(?
 
 
 class AssistantParser:
+    @staticmethod
+    def _extract_json_object(text: str):
+        if not text:
+            return None
+
+        cleaned = text.strip()
+        if cleaned.startswith('```'):
+            cleaned = re.sub(r'^```[a-zA-Z]*\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            pass
+
+        start = cleaned.find('{')
+        end = cleaned.rfind('}')
+        if start == -1 or end == -1 or end <= start:
+            return None
+
+        snippet = cleaned[start:end + 1]
+        try:
+            return json.loads(snippet)
+        except Exception:
+            return None
+
     @staticmethod
     def _normalize_text(text: str) -> str:
         return (text or '').strip()
@@ -96,7 +123,11 @@ class AssistantParser:
 
     @staticmethod
     def _parse_with_gemini_if_configured(message: str):
+        if not bool(getattr(settings, 'ASSISTANT_ENABLE_GEMINI', False)):
+            return None
+
         api_key = getattr(settings, 'GEMINI_API_KEY', '')
+        model = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         if not api_key:
             return None
 
@@ -109,10 +140,14 @@ class AssistantParser:
             f'Mensagem: {message}'
         )
 
-        url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}'
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 400},
+            'generationConfig': {
+                'temperature': 0.1,
+                'maxOutputTokens': 400,
+                'responseMimeType': 'application/json',
+            },
         }
 
         try:
@@ -120,7 +155,7 @@ class AssistantParser:
             response.raise_for_status()
             data = response.json()
             text = data['candidates'][0]['content']['parts'][0]['text']
-            parsed = json.loads(text)
+            parsed = AssistantParser._extract_json_object(text)
             return parsed if isinstance(parsed, dict) else None
         except Exception:
             return None
@@ -208,8 +243,19 @@ class AssistantParser:
         return {'intent': 'unknown', 'draft': {'description': text}, 'missing_fields': ['intent'], 'provider': 'rule-based'}
 
 
+class AssistantDisabledException(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = 'Assistente temporariamente desativado.'
+    default_code = 'assistant_disabled'
+
+
 class AssistantParseView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not bool(getattr(settings, 'ASSISTANT_CHAT_ENABLED', False)):
+            raise AssistantDisabledException()
 
     def post(self, request):
         message = request.data.get('message', '')
@@ -219,6 +265,11 @@ class AssistantParseView(APIView):
 
 class AssistantExecuteView(APIView):
     permission_classes = [IsAuthenticated]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not bool(getattr(settings, 'ASSISTANT_CHAT_ENABLED', False)):
+            raise AssistantDisabledException()
 
     def _find_vehicle(self, tenant, plate):
         if not plate:

@@ -26,3 +26,11 @@ class IsTenantAdminOrManager(BasePermission):
             and user.is_authenticated
             and getattr(user, 'role', None) in ['admin', 'manager']
         )
+
+
+class IsSuperUserOnly(BasePermission):
+    message = 'Acesso restrito a superusuários.'
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        return bool(user and user.is_authenticated and getattr(user, 'is_superuser', False))

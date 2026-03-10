@@ -1,6 +1,6 @@
-# 📖 Manual de Implantação - FinManager SaaS
+# 📖 Manual de Implantação - Elo Financeiro
 
-Guia completo para importar, configurar e executar o sistema de Gestão Financeira no VSCode.
+Guia completo para importar, configurar e executar o sistema Elo Financeiro no VSCode.
 
 ---
 
@@ -949,7 +949,7 @@ git init
 git add .
 
 # Fazer commit
-git commit -m "Inicial: FinManager SaaS"
+git commit -m "Inicial: Elo Financeiro"
 
 # Ver histórico
 git log
@@ -1051,7 +1051,7 @@ Se encontrar problemas:
 
 ## 🎉 Conclusão
 
-Parabéns! Você agora tem um sistema completo de Gestão Financeira rodando localmente!
+Parabéns! Você agora tem o sistema Elo Financeiro rodando localmente!
 
 ### Próximos Passos
 
@@ -1066,4 +1066,4 @@ Boa sorte! 🚀
 
 **Versão**: 1.0  
 **Data**: Fevereiro 2024  
-**Autor**: FinManager Development Team
+**Autor**: Elo Financeiro Development Team

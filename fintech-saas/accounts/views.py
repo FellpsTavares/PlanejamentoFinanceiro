@@ -10,9 +10,9 @@ from .serializers import (
     UserSerializer, UserCreateSerializer, TenantSerializer,
     CustomTokenObtainPairSerializer, TenantAdminCreateSerializer,
     TenantAdminUserCreateSerializer, TenantAdminUserUpdateSerializer,
-    TenantParameterSerializer, TenantAuditLogSerializer,
+    TenantParameterSerializer, TenantAuditLogSerializer, AccountSelfSignupSerializer,
 )
-from .permissions import IsPlatformAdmin, IsTenantAdminOrManager
+from .permissions import IsPlatformAdmin, IsTenantAdminOrManager, IsSuperUserOnly
 
 User = get_user_model()
 
@@ -62,6 +62,14 @@ class UserViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='register-account')
+    def register_account(self, request):
+        """Auto cadastro: cria tenant e usuário admin do próprio cliente."""
+        serializer = AccountSelfSignupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['put'], permission_classes=[IsAuthenticated])
     def update_profile(self, request, pk=None):
@@ -161,6 +169,12 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TenantSerializer
     permission_classes = [AllowAny]
     lookup_field = 'slug'
+
+    def get_queryset(self):
+        user = getattr(self.request, 'user', None)
+        if user and user.is_authenticated and getattr(user, 'is_superuser', False):
+            return Tenant.objects.all()
+        return Tenant.objects.filter(is_active=True)
 
     def get_serializer_class(self):
         if self.action == 'create_tenant':
@@ -364,3 +378,50 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
 
         logs = TenantAuditLog.objects.filter(tenant=tenant).select_related('user')[:limit]
         return Response(TenantAuditLogSerializer(logs, many=True).data)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[IsAuthenticated, IsSuperUserOnly],
+        url_path='accounts'
+    )
+    def accounts(self, request):
+        """Lista contas (tenants) para gestão financeira por superusuário."""
+        tenants = Tenant.objects.all().order_by('-created_at')
+        return Response(TenantSerializer(tenants, many=True).data)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated, IsSuperUserOnly],
+        url_path='account-status'
+    )
+    def account_status(self, request, slug=None):
+        """Atualiza status de conta e vencimento do tenant (somente superusuário)."""
+        tenant = self.get_object()
+
+        allowed_status = {
+            Tenant.ACCOUNT_STATUS_ACTIVE,
+            Tenant.ACCOUNT_STATUS_PAST_DUE,
+            Tenant.ACCOUNT_STATUS_SUSPENDED,
+            Tenant.ACCOUNT_STATUS_CANCELLED,
+        }
+
+        payload_status = request.data.get('account_status', tenant.account_status)
+        if payload_status not in allowed_status:
+            return Response({'account_status': ['Status inválido.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        tenant.account_status = payload_status
+        if 'billing_due_date' in request.data:
+            tenant.billing_due_date = request.data.get('billing_due_date') or None
+        if 'is_active' in request.data:
+            raw_active = request.data.get('is_active')
+            if isinstance(raw_active, bool):
+                tenant.is_active = raw_active
+            else:
+                tenant.is_active = str(raw_active).strip().lower() in {'1', 'true', 'yes', 'on'}
+        if 'account_notes' in request.data:
+            tenant.account_notes = str(request.data.get('account_notes') or '')
+        tenant.save(update_fields=['account_status', 'billing_due_date', 'is_active', 'account_notes', 'updated_at'])
+
+        return Response(TenantSerializer(tenant).data)

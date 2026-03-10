@@ -1,6 +1,6 @@
-# FinManager SaaS - Gestão Financeira Pessoal
+# Elo Financeiro - Conectando a sua empresa à eficiencia
 
-MVP de um SaaS de Gestão Financeira com Backend Django + Frontend React, autenticação JWT, multi-tenant e CRUD completo.
+MVP do sistema Elo Financeiro com Backend Django + Frontend React, autenticação JWT, multi-tenant e CRUD completo.
 
 ## 📋 Requisitos
 
@@ -331,7 +331,7 @@ MIT
 
 ## 👨‍💻 Autor
 
-Desenvolvido como MVP de SaaS de Gestão Financeira.
+Desenvolvido como MVP do Elo Financeiro.
 
 ## 📞 Suporte
 

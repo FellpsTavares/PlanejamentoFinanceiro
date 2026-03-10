@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 import uuid
 
 
@@ -9,6 +10,17 @@ class Tenant(models.Model):
     Modelo para representar um Tenant (Empresa/Organização).
     Cada tenant é um isolamento lógico de dados no sistema.
     """
+    ACCOUNT_STATUS_ACTIVE = 'active'
+    ACCOUNT_STATUS_PAST_DUE = 'past_due'
+    ACCOUNT_STATUS_SUSPENDED = 'suspended'
+    ACCOUNT_STATUS_CANCELLED = 'cancelled'
+    ACCOUNT_STATUS_CHOICES = (
+        (ACCOUNT_STATUS_ACTIVE, _('Ativa')),
+        (ACCOUNT_STATUS_PAST_DUE, _('Inadimplente')),
+        (ACCOUNT_STATUS_SUSPENDED, _('Suspensa')),
+        (ACCOUNT_STATUS_CANCELLED, _('Desistência/Cancelada')),
+    )
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, verbose_name=_('Nome do Tenant'))
     slug = models.SlugField(unique=True, verbose_name=_('Slug'))
@@ -26,6 +38,9 @@ class Tenant(models.Model):
     # Módulos ativados para este tenant (feature flags)
     has_module_investments = models.BooleanField(default=False, verbose_name=_('Módulo Investimentos'))
     has_module_transport = models.BooleanField(default=False, verbose_name=_('Módulo Transportadora'))
+    account_status = models.CharField(max_length=16, choices=ACCOUNT_STATUS_CHOICES, default=ACCOUNT_STATUS_ACTIVE)
+    billing_due_date = models.DateField(null=True, blank=True, verbose_name=_('Vencimento da conta'))
+    account_notes = models.TextField(blank=True, verbose_name=_('Observações da conta'))
     
     class Meta:
         verbose_name = _('Tenant')
@@ -34,6 +49,18 @@ class Tenant(models.Model):
     
     def __str__(self):
         return self.name
+
+    def is_account_blocked(self):
+        if not self.is_active:
+            return True
+
+        if self.account_status in {self.ACCOUNT_STATUS_SUSPENDED, self.ACCOUNT_STATUS_CANCELLED}:
+            return True
+
+        if self.billing_due_date and self.billing_due_date < timezone.localdate():
+            return True
+
+        return False
 
 
 class User(AbstractUser):

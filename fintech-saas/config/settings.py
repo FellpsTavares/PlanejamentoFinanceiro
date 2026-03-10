@@ -12,10 +12,35 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
+from decouple import AutoConfig
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+config = AutoConfig(search_path=BASE_DIR)
+
+
+def _read_env_file_value(key: str, default: str = '') -> str:
+    env_file = BASE_DIR / '.env'
+    if not env_file.exists():
+        return default
+
+    for raw_line in env_file.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        if k.strip() == key:
+            return v.strip().strip('"').strip("'")
+
+    return default
+
+
+def _to_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 # Quick-start development settings - unsuitable for production
@@ -229,3 +254,18 @@ AUTHENTICATION_BACKENDS = [
 # ============================================================================
 
 TENANT_MODEL = 'accounts.Tenant'
+
+# ============================================================================
+# AI Assistant Configuration
+# ============================================================================
+
+GEMINI_API_KEY = config('GEMINI_API_KEY', default='') or _read_env_file_value('GEMINI_API_KEY', default='')
+GEMINI_MODEL = config('GEMINI_MODEL', default='gemini-2.5-flash') or _read_env_file_value('GEMINI_MODEL', default='gemini-2.5-flash')
+ASSISTANT_ENABLE_GEMINI = _to_bool(
+    config('ASSISTANT_ENABLE_GEMINI', default=_read_env_file_value('ASSISTANT_ENABLE_GEMINI', default='false')),
+    default=False,
+)
+ASSISTANT_CHAT_ENABLED = _to_bool(
+    config('ASSISTANT_CHAT_ENABLED', default=_read_env_file_value('ASSISTANT_CHAT_ENABLED', default='false')),
+    default=False,
+)

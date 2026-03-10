@@ -14,7 +14,9 @@ class TenantSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = [
             'id', 'name', 'slug', 'description', 'email', 'phone',
-            'is_active', 'has_module_investments', 'has_module_transport', 'created_at'
+            'is_active', 'has_module_investments', 'has_module_transport',
+            'account_status', 'billing_due_date', 'account_notes',
+            'created_at'
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -28,9 +30,67 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'phone', 'bio', 'is_verified', 'is_platform_admin', 'role', 'preferred_currency',
+            'is_superuser',
             'tenant', 'created_at'
         ]
         read_only_fields = ['id', 'created_at']
+
+
+class AccountSelfSignupSerializer(serializers.Serializer):
+    tenant_name = serializers.CharField(max_length=255)
+    tenant_slug = serializers.SlugField(max_length=255)
+    tenant_email = serializers.EmailField()
+    tenant_phone = serializers.CharField(required=False, allow_blank=True)
+
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    password_confirm = serializers.CharField(write_only=True, min_length=8)
+
+    def validate(self, attrs):
+        if attrs.get('password') != attrs.get('password_confirm'):
+            raise serializers.ValidationError({'password_confirm': 'As senhas não coincidem.'})
+
+        tenant_slug = attrs.get('tenant_slug')
+        if Tenant.objects.filter(slug=tenant_slug).exists():
+            raise serializers.ValidationError({'tenant_slug': 'Este slug já está em uso.'})
+
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        validated_data.pop('password_confirm', None)
+
+        tenant = Tenant.objects.create(
+            name=validated_data['tenant_name'],
+            slug=validated_data['tenant_slug'],
+            email=validated_data['tenant_email'],
+            phone=validated_data.get('tenant_phone', ''),
+            is_active=True,
+            account_status=Tenant.ACCOUNT_STATUS_ACTIVE,
+            has_module_transport=True,
+            has_module_investments=False,
+        )
+
+        base_username = validated_data['email'].split('@')[0]
+        username = base_username
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f'{base_username}{suffix}'
+
+        user = User.objects.create_user(
+            tenant=tenant,
+            username=username,
+            email=validated_data['email'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', ''),
+            role=User.ROLE_ADMIN,
+            password=password,
+        )
+
+        return user
 
 
 class TenantAdminCreateSerializer(serializers.ModelSerializer):
@@ -189,10 +249,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['tenant_id'] = str(user.tenant.id)
         token['tenant_slug'] = user.tenant.slug
         token['is_platform_admin'] = bool(getattr(user, 'is_platform_admin', False))
+        token['is_superuser'] = bool(getattr(user, 'is_superuser', False))
         token['role'] = getattr(user, 'role', User.ROLE_OPERATOR)
         # Expor flags de módulos no token para o frontend
         token['has_module_investments'] = bool(getattr(user.tenant, 'has_module_investments', False))
         token['has_module_transport'] = bool(getattr(user.tenant, 'has_module_transport', False))
+        token['tenant_account_status'] = getattr(user.tenant, 'account_status', Tenant.ACCOUNT_STATUS_ACTIVE)
+        token['tenant_billing_due_date'] = str(getattr(user.tenant, 'billing_due_date', '') or '')
         
         return token
     
@@ -200,6 +263,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         """Valida o login"""
         # Primeiro, validar com o serializer pai
         data = super().validate(attrs)
+
+        tenant = getattr(self.user, 'tenant', None)
+        if tenant and not getattr(self.user, 'is_superuser', False):
+            if tenant.is_account_blocked():
+                if tenant.account_status == Tenant.ACCOUNT_STATUS_CANCELLED:
+                    raise serializers.ValidationError({'detail': 'Conta desativada por desistência/cancelamento.'})
+                if tenant.account_status == Tenant.ACCOUNT_STATUS_SUSPENDED:
+                    raise serializers.ValidationError({'detail': 'Conta suspensa. Entre em contato com o suporte.'})
+                if tenant.billing_due_date:
+                    raise serializers.ValidationError({'detail': 'Conta bloqueada por falta de pagamento (vencida).'})
+                raise serializers.ValidationError({'detail': 'Conta indisponível para login.'})
         
         # Adicionar informações do usuário na resposta
         user = self.user

@@ -62,6 +62,32 @@ export const authService = {
     return response.data;
   },
 
+  registerAccount: async ({
+    tenantName,
+    tenantSlug,
+    tenantEmail,
+    tenantPhone,
+    firstName,
+    lastName,
+    email,
+    password,
+    passwordConfirm,
+  }) => {
+    const response = await api.post('/users/register-account/', {
+      tenant_name: tenantName,
+      tenant_slug: tenantSlug,
+      tenant_email: tenantEmail,
+      tenant_phone: tenantPhone,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      password,
+      password_confirm: passwordConfirm,
+    });
+
+    return response.data;
+  },
+
   // Obter usuário atual
   getCurrentUser: () => {
     const stored = localStorage.getItem('user');
@@ -85,8 +111,17 @@ export const authService = {
           if (payload.is_platform_admin !== undefined) {
             user.is_platform_admin = Boolean(payload.is_platform_admin);
           }
+          if (payload.is_superuser !== undefined) {
+            user.is_superuser = Boolean(payload.is_superuser);
+          }
           if (payload.role !== undefined) {
             user.role = payload.role;
+          }
+          if (payload.tenant_account_status !== undefined) {
+            user.tenant.account_status = payload.tenant_account_status;
+          }
+          if (payload.tenant_billing_due_date !== undefined) {
+            user.tenant.billing_due_date = payload.tenant_billing_due_date;
           }
         }
       }

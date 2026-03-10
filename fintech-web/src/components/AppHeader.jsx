@@ -27,7 +27,7 @@ export default function AppHeader() {
     if (location.pathname.startsWith('/transactions')) return 'Transações';
     if (location.pathname.startsWith('/settings')) return 'Configurações';
     if (location.pathname.startsWith('/admin')) return 'Administração';
-    return 'Kaptal Pro';
+    return 'Elo Financeiro';
   };
 
   return (

@@ -53,7 +53,8 @@ export default function Dashboard() {
       {/* Conteúdo */}
       <main className="w-full px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Kaptal Pro</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Elo Financeiro</h1>
+          <p className="text-gray-600">Conectando a sua empresa à eficiencia</p>
           <p className="text-gray-600">Bem-vindo, {user?.first_name || user?.email}!</p>
         </div>
         {error && (
