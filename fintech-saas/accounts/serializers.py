@@ -15,6 +15,7 @@ class TenantSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'description', 'email', 'phone',
             'is_active', 'has_module_investments', 'has_module_transport',
+            'days_before_review_alert', 'km_before_review_alert',
             'account_status', 'billing_due_date', 'account_notes',
             'created_at'
         ]

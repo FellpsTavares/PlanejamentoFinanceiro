@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from decimal import Decimal
 from .models import Vehicle, FuelLog, TransportRevenue, TransportExpense
-from .models import Trip, TripMovement
+from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert
 from accounts.models import TenantParameter
 
 
@@ -25,11 +25,16 @@ class TransportExpenseSerializer(serializers.ModelSerializer):
 
 class VehicleSerializer(serializers.ModelSerializer):
     avg_consumption = serializers.SerializerMethodField(read_only=True)
+    current_km = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Vehicle
-        fields = ['id', 'tenant', 'plate', 'model', 'year', 'capacity', 'avg_consumption']
-        read_only_fields = ['avg_consumption', 'tenant']
+        fields = [
+            'id', 'tenant', 'plate', 'model', 'year', 'capacity',
+            'initial_km', 'is_dual_wheel', 'number_of_axles', 'next_review_date', 'next_review_km',
+            'avg_consumption', 'current_km'
+        ]
+        read_only_fields = ['avg_consumption', 'current_km', 'tenant']
 
     def get_avg_consumption(self, obj):
         # Busca os dois últimos registros de FuelLog do veículo
@@ -221,3 +226,104 @@ class TripMovementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'description': 'Informe a descrição deste lançamento.'})
 
         return data
+
+
+class TireInventorySerializer(serializers.ModelSerializer):
+    total_km_run = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = TireInventory
+        fields = [
+            'id', 'tenant', 'brand', 'serial_number', 'purchase_date', 'status', 'condition',
+            'total_km_run', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+    def get_total_km_run(self, obj):
+        placements = obj.placements.select_related('vehicle').all()
+        total = 0
+        for placement in placements:
+            start = int(placement.current_km_at_installation or 0)
+            if placement.removal_km is not None:
+                end = int(placement.removal_km)
+            else:
+                end = int(placement.vehicle.current_km or start)
+            total += max(0, end - start)
+        return total
+
+
+class VehicleTirePlacementSerializer(serializers.ModelSerializer):
+    tire_brand = serializers.CharField(source='tire.brand', read_only=True)
+    tire_serial_number = serializers.CharField(source='tire.serial_number', read_only=True)
+
+    class Meta:
+        model = VehicleTirePlacement
+        fields = [
+            'id', 'tenant', 'vehicle', 'tire', 'tire_brand', 'tire_serial_number',
+            'installation_date', 'removal_date', 'removal_km', 'axle_number', 'side', 'position',
+            'current_km_at_installation', 'created_at'
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at']
+
+    def validate(self, attrs):
+        side = attrs.get('side', getattr(self.instance, 'side', None))
+        position = attrs.get('position', getattr(self.instance, 'position', None))
+        if side not in {VehicleTirePlacement.SIDE_LEFT, VehicleTirePlacement.SIDE_RIGHT}:
+            raise serializers.ValidationError({'side': 'Lado inválido.'})
+        if position not in {VehicleTirePlacement.POSITION_INSIDE, VehicleTirePlacement.POSITION_OUTSIDE}:
+            raise serializers.ValidationError({'position': 'Posição inválida.'})
+        return attrs
+
+
+class OilChangeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OilChangeLog
+        fields = [
+            'id', 'tenant', 'maintenance', 'oil_brand', 'quantity_liters', 'type',
+            'next_change_km_interval', 'next_change_date_interval', 'created_at'
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at']
+
+
+class MaintenanceLogSerializer(serializers.ModelSerializer):
+    oil_change = OilChangeLogSerializer(required=False, allow_null=True)
+
+    class Meta:
+        model = MaintenanceLog
+        fields = [
+            'id', 'tenant', 'vehicle', 'date', 'odometer_at_maintenance',
+            'description', 'created_at', 'oil_change'
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at']
+
+    def create(self, validated_data):
+        oil_payload = validated_data.pop('oil_change', None)
+        maintenance = super().create(validated_data)
+        if oil_payload:
+            OilChangeLog.objects.create(tenant=maintenance.tenant, maintenance=maintenance, **oil_payload)
+        return maintenance
+
+    def update(self, instance, validated_data):
+        oil_payload = validated_data.pop('oil_change', None)
+        maintenance = super().update(instance, validated_data)
+        if oil_payload is not None:
+            if hasattr(maintenance, 'oil_change'):
+                for key, value in oil_payload.items():
+                    setattr(maintenance.oil_change, key, value)
+                maintenance.oil_change.save()
+            else:
+                OilChangeLog.objects.create(tenant=maintenance.tenant, maintenance=maintenance, **oil_payload)
+        return maintenance
+
+
+class MaintenanceAlertSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+
+    class Meta:
+        model = MaintenanceAlert
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model', 'level',
+            'title', 'message', 'is_read', 'alert_date', 'created_at'
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at']

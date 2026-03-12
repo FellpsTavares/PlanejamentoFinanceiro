@@ -9,6 +9,18 @@ export const transportService = {
     const res = await api.post('/transport/vehicles/', payload);
     return res.data;
   },
+  updateVehicle: async (id, payload) => {
+    const res = await api.patch(`/transport/vehicles/${id}/`, payload);
+    return res.data;
+  },
+  rotateTires: async (vehicleId, payload) => {
+    const res = await api.post(`/transport/vehicles/${vehicleId}/rotate_tires/`, payload);
+    return res.data;
+  },
+  setCurrentTires: async (vehicleId, payload) => {
+    const res = await api.post(`/transport/vehicles/${vehicleId}/set-current-tires/`, payload);
+    return res.data;
+  },
   createRevenue: async (payload) => {
     const res = await api.post('/transport/revenues/', payload);
     return res.data;
@@ -79,6 +91,42 @@ export const transportService = {
   },
   getTrips: async (params) => {
     const res = await api.get('/transport/trips/', { params });
+    return res.data;
+  },
+  getTires: async (params = {}) => {
+    const res = await api.get('/transport/tires/', { params });
+    return res.data;
+  },
+  createTire: async (payload) => {
+    const res = await api.post('/transport/tires/', payload);
+    return res.data;
+  },
+  updateTire: async (id, payload) => {
+    const res = await api.patch(`/transport/tires/${id}/`, payload);
+    return res.data;
+  },
+  getTirePlacements: async (params = {}) => {
+    const res = await api.get('/transport/tire-placements/', { params });
+    return res.data;
+  },
+  getMaintenanceLogs: async (params = {}) => {
+    const res = await api.get('/transport/maintenance-logs/', { params });
+    return res.data;
+  },
+  createMaintenanceLog: async (payload) => {
+    const res = await api.post('/transport/maintenance-logs/', payload);
+    return res.data;
+  },
+  updateMaintenanceLog: async (id, payload) => {
+    const res = await api.patch(`/transport/maintenance-logs/${id}/`, payload);
+    return res.data;
+  },
+  getMaintenanceAlerts: async (params = {}) => {
+    const res = await api.get('/transport/maintenance-alerts/', { params });
+    return res.data;
+  },
+  markMaintenanceAlertRead: async (id) => {
+    const res = await api.post(`/transport/maintenance-alerts/${id}/mark-read/`);
     return res.data;
   },
   deleteRevenue: async (id) => {

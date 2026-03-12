@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { transactionService } from '../services/transactions';
+import { transportService } from '../services/transport';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -26,6 +28,11 @@ export default function Dashboard() {
         // Obter resumo de transações
         const summaryData = await transactionService.getSummary();
         setSummary(summaryData);
+
+        if (currentUser?.tenant?.has_module_transport) {
+          const alertsData = await transportService.getMaintenanceAlerts({ is_read: false });
+          setAlerts(alertsData.results || alertsData);
+        }
       } catch (err) {
         setError('Erro ao carregar dados');
         console.error(err);
@@ -60,6 +67,38 @@ export default function Dashboard() {
         {error && (
           <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
             {error}
+          </div>
+        )}
+
+        {alerts.length > 0 && (
+          <div className="mb-8 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h2 className="text-lg font-bold text-amber-900 mb-3">Avisos de Revisão</h2>
+            <div className="space-y-2">
+              {alerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`rounded p-3 border ${alert.level === 'critical' ? 'border-red-300 bg-red-50' : 'border-yellow-300 bg-yellow-50'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className={`font-semibold ${alert.level === 'critical' ? 'text-red-700' : 'text-yellow-800'}`}>
+                        {alert.level === 'critical' ? 'Crítico' : 'Atenção'} • {alert.title}
+                      </p>
+                      <p className="text-sm text-gray-700">{alert.message}</p>
+                    </div>
+                    <button
+                      className="text-sm px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50"
+                      onClick={async () => {
+                        await transportService.markMaintenanceAlertRead(alert.id);
+                        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                      }}
+                    >
+                      Marcar como lido
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

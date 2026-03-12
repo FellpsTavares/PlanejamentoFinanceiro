@@ -5,7 +5,7 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 ## 1) Estado atual do projeto
 - Stack: Django + DRF (`fintech-saas`) e React + Vite + Tailwind (`fintech-web`).
 - Arquitetura: multi-tenant com isolamento por `request.user.tenant`.
-- Foco funcional atual: financeiro, transportadora com viagens em curso, investimentos, configuracoes por modulo (incluindo Financas), governanca de contas SaaS e relatorios PDF por modulo.
+- Foco funcional atual: financeiro, transportadora (viagens + manutencao + pneus + alertas), investimentos, configuracoes por modulo (incluindo Financas), governanca de contas SaaS e relatorios PDF por modulo.
 
 ## 2) Funcionalidades consolidadas (referencia rapida)
 
@@ -43,10 +43,20 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - Regra de combustivel: descricao opcional e categoria padrao de combustivel.
 - Recalculo automatico de totais da viagem com base nas movimentacoes.
 - Dashboard/gerenciamento permite abrir viagem especifica por query param (`?trip=<id>`).
+- Cadastro de veiculo com suporte a `number_of_axles`, `is_dual_wheel`, `next_review_date`, `next_review_km` e `initial_km`.
+- Gestao de pneus por inventario (`TireInventory`) e posicionamento atual por eixo/lado/posicao (`VehicleTirePlacement`).
+- Regras de rodagem:
+  - rodagem simples: 1 pneu por lado em cada eixo;
+  - rodagem dupla: 2 pneus por lado em cada eixo (`inside` e `outside`).
+- Validacao para impedir o mesmo pneu em mais de uma posicao simultanea (frontend e backend).
+- Rodizio de pneus por troca de posicoes entre origem e destino.
+- Controle de manutencao e oleo via `MaintenanceLog` e `OilChangeLog`.
+- Alertas de revisao por data/km via `MaintenanceAlert`, com geracao por comando e task.
+- Perfil de veiculo reorganizado com secoes expansivas e campos de expansao iniciando recolhidos por padrao.
 
 ### 2.4 Home e navegacao
 - Home dedicada em `/home` (nao redireciona mais para dashboards).
-- Header com botao Home em icone de casa.
+- Header com botao Home usando logo (`LogoHome.png`).
 - Sidebar compacta com expansao em hover.
 - Sidebar com identidade visual atualizada (fundo branco e logo oficial em `public/logo/LogoEloFinancas.png`).
 
@@ -73,6 +83,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - `fintech-saas/transport/models.py`
   - `fintech-saas/transport/serializers.py`
   - `fintech-saas/transport/views.py`
+  - `fintech-saas/transport/tasks.py`
+  - `fintech-saas/transport/management/commands/generate_review_alerts.py`
   - `fintech-saas/config/urls.py`
 - Frontend:
   - `fintech-web/src/App.jsx`
@@ -82,6 +94,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - `fintech-web/src/pages/NewTransaction.jsx`
   - `fintech-web/src/pages/TransportTrips.jsx`
   - `fintech-web/src/pages/TransportDashboard.jsx`
+  - `fintech-web/src/pages/TransportVehicleNew.jsx`
+  - `fintech-web/src/pages/TransportVehicleProfile.jsx`
   - `fintech-web/src/pages/AccountManagement.jsx`
   - `fintech-web/src/components/Sidebar.jsx`
   - `fintech-web/src/components/AppHeader.jsx`
@@ -97,6 +111,11 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - `final_km >= initial_km`.
   - Receita de viagem depende da regra de recebimento/status vigente no fluxo.
   - Totais de viagem devem refletir movimentacoes (`TripMovement`) e nao somente valores manuais.
+- Pneus e manutencao:
+  - Um mesmo pneu nao pode ocupar duas posicoes ativas no mesmo veiculo.
+  - Em rodagem dupla, a posicao (`inside`/`outside`) e obrigatoria para pneus atuais.
+  - Trocas de posicao (rodizio) devem preservar historico de montagem/remoção (`mounted_at` / `removed_at`).
+  - `current_km` do veiculo deve considerar o maior valor consistente entre viagens concluidas e movimentacao acumulada.
 - PDF:
   - Campos solicitados em `fields` precisam ser saneados por whitelist.
   - Ordenacao deve aceitar apenas colunas previstas para cada modulo.
@@ -108,7 +127,11 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - `transport/0006_trip_status.py`
 - `transport/0007_trip_dates_progress_tripmovement.py`
 - `transport/0008_tripmovement_description_optional.py`
+- `transport/0009_vehicle_review_tires_maintenance_alerts.py`
+- `transport/0010_tire_condition_and_placement_position.py`
+- `transport/0011_vehicle_is_dual_wheel.py`
 - `finance/0004_default_payment_methods.py`
+- `accounts/0010_tenant_review_alert_settings.py`
 
 ## 6) Checklist de manutencao futura (priorizado)
 
@@ -118,6 +141,14 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - encerramento de viagem
   - edicao/exclusao de movimentacoes
   - recalc de liquido/receita/despesa
+- Criar testes para regras de pneus e rodagem:
+  - rodagem simples x rodagem dupla
+  - bloqueio de pneu duplicado em posicoes simultaneas
+  - rodizio entre posicoes com atualizacao correta de historico
+- Criar testes para manutencao e alertas de revisao:
+  - gatilho por data limite
+  - gatilho por km limite
+  - idempotencia da geracao de alertas
 - Criar testes de permissao para endpoints de configuracao geral e auditoria.
 - Criar testes de contrato para PDF (filtros + `fields` + `order_by/order_dir`).
 - Criar testes de bloqueio de conta por tenant (`past_due`, `suspended`, `cancelled`) no login.
@@ -141,6 +172,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - Relatorios PDF dependem de filtros corretos por modulo; qualquer alteracao de schema deve atualizar mapeamentos de campos/ordenacao.
 - Se `ASSISTANT_CHAT_ENABLED` permanecer `false`, chamadas diretas para `/api/assistant/*` retornam `503` (comportamento esperado no momento).
 - Login foi modernizado com plano de fundo em `public/Plano de fundo Login.png`; alteracoes de arquivo/caminho podem quebrar o visual da tela.
+- Regras de pneus dependem de coerencia entre UI (campos por eixo/lado/posicao) e backend (validacao final); qualquer ajuste de layout deve manter o contrato da API.
+- Campos expansivos no perfil de veiculo iniciam recolhidos; alteracoes futuras devem evitar regressao de UX e de ordem de hooks no React.
 
 ## 8) Rotina recomendada antes de deploy
 1. Backend: `python manage.py check`
@@ -152,6 +185,10 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - validar bloqueio de login para conta inadimplente/suspensa/cancelada
    - criar/editar viagem
    - adicionar/editar/excluir movimentacao
+  - cadastrar/editar veiculo com eixos e rodagem dupla
+  - registrar pneus atuais e validar bloqueio de duplicidade
+  - executar rodizio de pneus e conferir posicoes
+  - registrar manutencao/oleo e validar alertas de revisao
    - gerar PDF nos 3 modulos
   - validar tela de configuracoes gerais e aba Financas
   - validar menu/rota de gestao de contas para superusuario

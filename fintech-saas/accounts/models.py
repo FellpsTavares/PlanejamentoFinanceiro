@@ -38,6 +38,8 @@ class Tenant(models.Model):
     # Módulos ativados para este tenant (feature flags)
     has_module_investments = models.BooleanField(default=False, verbose_name=_('Módulo Investimentos'))
     has_module_transport = models.BooleanField(default=False, verbose_name=_('Módulo Transportadora'))
+    days_before_review_alert = models.PositiveIntegerField(default=30, verbose_name=_('Dias para alerta de revisão'))
+    km_before_review_alert = models.PositiveIntegerField(default=1000, verbose_name=_('KM para alerta de revisão'))
     account_status = models.CharField(max_length=16, choices=ACCOUNT_STATUS_CHOICES, default=ACCOUNT_STATUS_ACTIVE)
     billing_due_date = models.DateField(null=True, blank=True, verbose_name=_('Vencimento da conta'))
     account_notes = models.TextField(blank=True, verbose_name=_('Observações da conta'))
