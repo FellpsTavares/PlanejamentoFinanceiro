@@ -402,17 +402,14 @@ export default function TransportVehicleProfile() {
             <input className="input" value={vehicleForm.capacity} onChange={(e) => setVehicleForm((p) => ({ ...p, capacity: e.target.value }))} />
           </div>
 
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-3 py-2 md:col-span-3">
-            <span className="text-sm font-medium text-gray-700">Rodagem dupla (4 pneus por eixo)</span>
-            <button
-              type="button"
-              onClick={() => setVehicleForm((p) => ({ ...p, is_dual_wheel: !p.is_dual_wheel }))}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${vehicleForm.is_dual_wheel ? 'bg-blue-600' : 'bg-gray-300'}`}
-              aria-pressed={vehicleForm.is_dual_wheel}
-              aria-label="Alternar rodagem dupla"
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${vehicleForm.is_dual_wheel ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
+          <label className="flex items-center gap-2 md:col-span-3 text-sm font-medium text-gray-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={Boolean(vehicleForm.is_dual_wheel)}
+              onChange={(e) => setVehicleForm((p) => ({ ...p, is_dual_wheel: e.target.checked }))}
+            />
+            Rodagem dupla (4 pneus por eixo)
           </label>
 
           <div>
@@ -582,16 +579,6 @@ export default function TransportVehicleProfile() {
                 </ul>
               </div>
 
-              <div>
-                <h4 className="font-semibold mb-2">Histórico de Instalações</h4>
-                <ul className="space-y-2">
-                  {placements.map((p) => (
-                    <li key={p.id} className="border rounded p-2 text-sm">
-                      {new Date(p.installation_date).toLocaleDateString('pt-BR')} • Eixo {p.axle_number} • {p.side === 'left' ? 'Esquerdo' : 'Direito'} • {p.position === 'inside' ? 'Dentro' : 'Fora'} • {p.tire_brand} ({p.tire_serial_number || 'sem série'}) • KM instalação: {formatNumber(p.current_km_at_installation, 0, 0)}{p.removal_km ? ` • KM remoção: ${formatNumber(p.removal_km, 0, 0)}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
             </div>
           )}
         </div>

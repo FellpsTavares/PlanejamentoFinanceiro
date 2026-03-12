@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django.db.models import Q
+from django.utils.dateparse import parse_date
 from django.contrib.auth import get_user_model
 from .models import Tenant, TenantParameter, TenantAuditLog
 from .audit import log_tenant_action
@@ -15,6 +17,36 @@ from .serializers import (
 from .permissions import IsPlatformAdmin, IsTenantAdminOrManager, IsSuperUserOnly
 
 User = get_user_model()
+
+
+MODULE_AUDIT_ENTITY_TYPES = {
+    TenantParameter.MODULE_GENERAL: ['tenant_parameters', 'user', 'tenant', 'module_installation'],
+    TenantParameter.MODULE_FINANCE: ['category', 'transaction', 'recurring_transaction', 'payment_method', 'credit_card_invoice', 'module_installation'],
+    TenantParameter.MODULE_TRANSPORT: ['trip', 'trip_movement', 'vehicle', 'transport_revenue', 'transport_expense', 'tire_inventory', 'vehicle_tire_placement', 'maintenance', 'oil_change', 'maintenance_alert', 'module_installation'],
+    TenantParameter.MODULE_INVESTMENTS: ['investment', 'investment_recommendation', 'module_installation'],
+}
+
+
+def _log_module_installations(*, tenant, user, source='unknown'):
+    installed_modules = [TenantParameter.MODULE_GENERAL, TenantParameter.MODULE_FINANCE]
+    if getattr(tenant, 'has_module_transport', False):
+        installed_modules.append(TenantParameter.MODULE_TRANSPORT)
+    if getattr(tenant, 'has_module_investments', False):
+        installed_modules.append(TenantParameter.MODULE_INVESTMENTS)
+
+    for module in installed_modules:
+        log_tenant_action(
+            tenant=tenant,
+            user=user,
+            action='module_installed',
+            entity_type='module_installation',
+            entity_id=module,
+            details={
+                'module': module,
+                'source': source,
+                'installed_modules': installed_modules,
+            },
+        )
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -69,6 +101,19 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = AccountSelfSignupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        log_tenant_action(
+            tenant=user.tenant,
+            user=user,
+            action='tenant_created',
+            entity_type='tenant',
+            entity_id=str(user.tenant.id),
+            details={
+                'module': TenantParameter.MODULE_GENERAL,
+                'source': 'self_signup',
+                'tenant_slug': user.tenant.slug,
+            },
+        )
+        _log_module_installations(tenant=user.tenant, user=user, source='self_signup')
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['put'], permission_classes=[IsAuthenticated])
@@ -199,6 +244,19 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         tenant = serializer.save()
+        log_tenant_action(
+            tenant=tenant,
+            user=request.user,
+            action='tenant_created',
+            entity_type='tenant',
+            entity_id=str(tenant.id),
+            details={
+                'module': TenantParameter.MODULE_GENERAL,
+                'source': 'platform_admin',
+                'tenant_slug': tenant.slug,
+            },
+        )
+        _log_module_installations(tenant=tenant, user=request.user, source='platform_admin')
         return Response(TenantSerializer(tenant).data, status=status.HTTP_201_CREATED)
 
     @action(
@@ -376,7 +434,52 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
             limit = 50
         limit = min(max(limit, 1), 200)
 
-        logs = TenantAuditLog.objects.filter(tenant=tenant).select_related('user')[:limit]
+        module = str(request.query_params.get('module') or '').strip().lower()
+        action_filter = str(request.query_params.get('action') or '').strip()
+        entity_type_filter = str(request.query_params.get('entity_type') or '').strip()
+        user_email_filter = str(request.query_params.get('user_email') or '').strip()
+        query = str(request.query_params.get('q') or '').strip()
+        start_date_str = str(request.query_params.get('start_date') or '').strip()
+        end_date_str = str(request.query_params.get('end_date') or '').strip()
+
+        logs_qs = TenantAuditLog.objects.filter(tenant=tenant).select_related('user')
+
+        if module:
+            if module not in MODULE_AUDIT_ENTITY_TYPES:
+                return Response({'module': ['Módulo inválido.']}, status=status.HTTP_400_BAD_REQUEST)
+
+            module_entity_types = MODULE_AUDIT_ENTITY_TYPES.get(module, [])
+            module_q = Q(details__module=module) | Q(entity_id=module, entity_type='module_installation')
+            if module_entity_types:
+                module_q = module_q | Q(entity_type__in=module_entity_types)
+            logs_qs = logs_qs.filter(module_q)
+
+        if action_filter:
+            logs_qs = logs_qs.filter(action__icontains=action_filter)
+
+        if entity_type_filter:
+            logs_qs = logs_qs.filter(entity_type__icontains=entity_type_filter)
+
+        if user_email_filter:
+            logs_qs = logs_qs.filter(user__email__icontains=user_email_filter)
+
+        if query:
+            logs_qs = logs_qs.filter(
+                Q(action__icontains=query)
+                | Q(entity_type__icontains=query)
+                | Q(entity_id__icontains=query)
+                | Q(user__email__icontains=query)
+            )
+
+        start_date = parse_date(start_date_str) if start_date_str else None
+        if start_date:
+            logs_qs = logs_qs.filter(created_at__date__gte=start_date)
+
+        end_date = parse_date(end_date_str) if end_date_str else None
+        if end_date:
+            logs_qs = logs_qs.filter(created_at__date__lte=end_date)
+
+        logs = logs_qs[:limit]
         return Response(TenantAuditLogSerializer(logs, many=True).data)
 
     @action(

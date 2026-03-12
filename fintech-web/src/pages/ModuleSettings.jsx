@@ -15,6 +15,23 @@ const MODULE_LABELS = {
   investments: 'Investimentos',
 };
 
+const MODULE_AUDIT_PURPOSE = {
+  general: 'Eventos administrativos do tenant, usuários, parâmetros globais e histórico de instalação.',
+  finance: 'Alterações financeiras como categorias, transações, recorrências e meios de pagamento.',
+  transport: 'Eventos da transportadora: viagens, veículos, pneus, manutenção e alertas operacionais.',
+  investments: 'Registros de investimentos e eventos de configuração do módulo de investimentos.',
+};
+
+const DEFAULT_AUDIT_FILTERS = {
+  q: '',
+  action: '',
+  entity_type: '',
+  user_email: '',
+  start_date: '',
+  end_date: '',
+  limit: '30',
+};
+
 const CATEGORY_EMOJI_OPTIONS = [
   { value: '💰', label: 'Dinheiro' },
   { value: '💳', label: 'Cartão' },
@@ -91,6 +108,7 @@ export default function ModuleSettings() {
   const [generalSaving, setGeneralSaving] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [auditFilters, setAuditFilters] = useState(DEFAULT_AUDIT_FILTERS);
   const [generalForm, setGeneralForm] = useState({
     passwordMinLength: '8',
     sessionTimeoutMinutes: '60',
@@ -172,10 +190,19 @@ export default function ModuleSettings() {
     }
   };
 
-  const loadAuditLogs = async () => {
+  const loadAuditLogs = async (module = activeModule) => {
     setAuditLoading(true);
     try {
-      const data = await tenantAuditService.list(30);
+      const data = await tenantAuditService.list({
+        limit: Number(auditFilters.limit || 30),
+        module,
+        action: auditFilters.action || undefined,
+        entity_type: auditFilters.entity_type || undefined,
+        user_email: auditFilters.user_email || undefined,
+        q: auditFilters.q || undefined,
+        start_date: auditFilters.start_date || undefined,
+        end_date: auditFilters.end_date || undefined,
+      });
       setAuditLogs(data || []);
     } catch (err) {
       const detail = err?.response?.data?.detail || 'Erro ao carregar auditoria';
@@ -224,8 +251,8 @@ export default function ModuleSettings() {
   }, [activeModule, sectionOpen.users]);
 
   useEffect(() => {
-    if (activeModule === 'general' && sectionOpen.audit && canEdit) {
-      loadAuditLogs();
+    if (sectionOpen.audit && canEdit) {
+      loadAuditLogs(activeModule);
     }
   }, [activeModule, sectionOpen.audit, canEdit]);
 
@@ -601,6 +628,111 @@ export default function ModuleSettings() {
     }
   };
 
+  const clearAuditFilters = () => {
+    setAuditFilters(DEFAULT_AUDIT_FILTERS);
+  };
+
+  const renderAuditSection = (moduleKey) => (
+    <div className="card p-4 border rounded space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">Auditoria</h3>
+          <p className="text-sm text-gray-600">{MODULE_AUDIT_PURPOSE[moduleKey]}</p>
+        </div>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary" type="button" onClick={() => toggleSection('audit')}>
+            {sectionOpen.audit ? 'Recolher' : 'Exibir auditoria'}
+          </button>
+          {canEdit && sectionOpen.audit && (
+            <button className="btn btn-secondary" type="button" onClick={() => loadAuditLogs(moduleKey)}>
+              Atualizar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sectionOpen.audit ? (!canEdit ? (
+        <p className="text-sm text-gray-500">Somente admin/manager pode visualizar auditoria.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <input
+              className="input-field w-full"
+              placeholder="Busca geral"
+              value={auditFilters.q}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, q: e.target.value }))}
+            />
+            <input
+              className="input-field w-full"
+              placeholder="Ação (ex: module_installed)"
+              value={auditFilters.action}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, action: e.target.value }))}
+            />
+            <input
+              className="input-field w-full"
+              placeholder="Tipo de entidade"
+              value={auditFilters.entity_type}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, entity_type: e.target.value }))}
+            />
+            <input
+              className="input-field w-full"
+              placeholder="Email do usuário"
+              value={auditFilters.user_email}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, user_email: e.target.value }))}
+            />
+            <input
+              className="input-field w-full"
+              type="date"
+              value={auditFilters.start_date}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, start_date: e.target.value }))}
+            />
+            <input
+              className="input-field w-full"
+              type="date"
+              value={auditFilters.end_date}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, end_date: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="input-field"
+              value={auditFilters.limit}
+              onChange={(e) => setAuditFilters((prev) => ({ ...prev, limit: e.target.value }))}
+            >
+              <option value="30">30 últimos</option>
+              <option value="50">50 últimos</option>
+              <option value="100">100 últimos</option>
+              <option value="200">200 últimos</option>
+            </select>
+            <button className="btn btn-primary" type="button" onClick={() => loadAuditLogs(moduleKey)}>
+              Aplicar filtros
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={clearAuditFilters}>
+              Limpar filtros
+            </button>
+          </div>
+
+          {auditLoading ? (
+            <p className="text-sm text-gray-600">Carregando auditoria...</p>
+          ) : auditLogs.length === 0 ? (
+            <p className="text-sm text-gray-600">Sem eventos de auditoria no momento.</p>
+          ) : (
+            <div className="space-y-2">
+              {auditLogs.map((log) => (
+                <div key={log.id} className="border rounded p-3 text-sm">
+                  <div className="font-medium">{log.action} • {log.entity_type}</div>
+                  <div className="text-gray-600">ID: {log.entity_id || '—'} • Usuário: {log.user_email || '—'}</div>
+                  <div className="text-gray-500">{new Date(log.created_at).toLocaleString('pt-BR')}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )) : null}
+    </div>
+  );
+
   return (
     <div className="p-6 max-w-3xl">
       <h1 className="text-2xl font-bold mb-4">Configurações por Módulo</h1>
@@ -858,35 +990,7 @@ export default function ModuleSettings() {
             )}
           </div>
 
-          <div className="card p-4 border rounded space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold">Auditoria</h3>
-              <div className="flex gap-2">
-                <button className="btn btn-secondary" type="button" onClick={() => toggleSection('audit')}>
-                  {sectionOpen.audit ? 'Recolher' : 'Exibir auditoria'}
-                </button>
-                {canEdit && sectionOpen.audit && <button className="btn btn-secondary" type="button" onClick={loadAuditLogs}>Atualizar</button>}
-              </div>
-            </div>
-
-            {sectionOpen.audit ? (!canEdit ? (
-              <p className="text-sm text-gray-500">Somente admin/manager pode visualizar auditoria.</p>
-            ) : auditLoading ? (
-              <p className="text-sm text-gray-600">Carregando auditoria...</p>
-            ) : auditLogs.length === 0 ? (
-              <p className="text-sm text-gray-600">Sem eventos de auditoria no momento.</p>
-            ) : (
-              <div className="space-y-2">
-                {auditLogs.map((log) => (
-                  <div key={log.id} className="border rounded p-3 text-sm">
-                    <div className="font-medium">{log.action} • {log.entity_type}</div>
-                    <div className="text-gray-600">ID: {log.entity_id || '—'} • Usuário: {log.user_email || '—'}</div>
-                    <div className="text-gray-500">{new Date(log.created_at).toLocaleString('pt-BR')}</div>
-                  </div>
-                ))}
-              </div>
-            )) : null}
-          </div>
+          {renderAuditSection('general')}
         </div>
       ) : activeModule === 'finance' ? (
         <div className="space-y-4">
@@ -1063,74 +1167,84 @@ export default function ModuleSettings() {
               </>
             )}
           </div>
+
+          {renderAuditSection('finance')}
         </div>
       ) : loading ? (
         <div>Carregando...</div>
       ) : activeModule === 'transport' ? (
-        <div className="card p-4 border rounded space-y-4">
-          <h2 className="text-lg font-semibold">Parâmetros da Transportadora</h2>
-          {loadError && <p className="text-sm text-red-600">{loadError}</p>}
+        <div className="space-y-4">
+          <div className="card p-4 border rounded space-y-4">
+            <h2 className="text-lg font-semibold">Parâmetros da Transportadora</h2>
+            {loadError && <p className="text-sm text-red-600">{loadError}</p>}
 
-          <div>
-            <label className="block text-sm font-medium">Tipo de recebimento do motorista</label>
-            <select
-              className="input-field w-full"
-              value={tipoRecebimento}
-              onChange={(e) => setTipoRecebimento(e.target.value)}
-              disabled={!canEdit || saving}
-            >
-              <option value="1">Valor fixo por viagem (manual)</option>
-              <option value="2">Porcentagem automática</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium">Porcentagem do motorista (%)</label>
-              <input
-                className="input-field w-full"
-                value={porcentagem}
-                onChange={(e) => setPorcentagem(e.target.value)}
-                disabled={!canEdit || saving || tipoRecebimento !== '2'}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Tipo da porcentagem</label>
+              <label className="block text-sm font-medium">Tipo de recebimento do motorista</label>
               <select
                 className="input-field w-full"
-                value={tipoPorcentagem}
-                onChange={(e) => setTipoPorcentagem(e.target.value)}
-                disabled={!canEdit || saving || tipoRecebimento !== '2'}
+                value={tipoRecebimento}
+                onChange={(e) => setTipoRecebimento(e.target.value)}
+                disabled={!canEdit || saving}
               >
-                <option value="bruta">Bruta (sobre valor total da viagem)</option>
-                <option value="liquida">Líquida (valor da viagem - gastos base)</option>
+                <option value="1">Valor fixo por viagem (manual)</option>
+                <option value="2">Porcentagem automática</option>
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium">Porcentagem do motorista (%)</label>
+                <input
+                  className="input-field w-full"
+                  value={porcentagem}
+                  onChange={(e) => setPorcentagem(e.target.value)}
+                  disabled={!canEdit || saving || tipoRecebimento !== '2'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Tipo da porcentagem</label>
+                <select
+                  className="input-field w-full"
+                  value={tipoPorcentagem}
+                  onChange={(e) => setTipoPorcentagem(e.target.value)}
+                  disabled={!canEdit || saving || tipoRecebimento !== '2'}
+                >
+                  <option value="bruta">Bruta (sobre valor total da viagem)</option>
+                  <option value="liquida">Líquida (valor da viagem - gastos base)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Tipos de andamento da viagem</label>
+              <input
+                className="input-field w-full"
+                value={tripProgressTypes}
+                onChange={(e) => setTripProgressTypes(e.target.value)}
+                disabled={!canEdit || saving}
+                placeholder="Ex: Coleta,Em trânsito,Descarga,Retorno"
+              />
+              <p className="text-xs text-gray-500 mt-1">Separe por vírgula os tipos disponíveis para seleção durante a viagem.</p>
+            </div>
+
+            <div className="pt-2">
+              <button className="btn btn-primary" type="button" onClick={handleSaveTransport} disabled={!canEdit || saving}>
+                Salvar configurações
+              </button>
+              {!canEdit && <p className="text-sm text-gray-500 mt-2">Somente admin/manager pode alterar configurações.</p>}
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium">Tipos de andamento da viagem</label>
-            <input
-              className="input-field w-full"
-              value={tripProgressTypes}
-              onChange={(e) => setTripProgressTypes(e.target.value)}
-              disabled={!canEdit || saving}
-              placeholder="Ex: Coleta,Em trânsito,Descarga,Retorno"
-            />
-            <p className="text-xs text-gray-500 mt-1">Separe por vírgula os tipos disponíveis para seleção durante a viagem.</p>
-          </div>
-
-          <div className="pt-2">
-            <button className="btn btn-primary" type="button" onClick={handleSaveTransport} disabled={!canEdit || saving}>
-              Salvar configurações
-            </button>
-            {!canEdit && <p className="text-sm text-gray-500 mt-2">Somente admin/manager pode alterar configurações.</p>}
-          </div>
+          {renderAuditSection('transport')}
         </div>
       ) : (
-        <div className="card p-4 border rounded">
-          <h2 className="text-lg font-semibold mb-2">Parâmetros de Investimentos</h2>
-          <p className="text-sm text-gray-600">Sem parâmetros configuráveis neste módulo no momento.</p>
+        <div className="space-y-4">
+          <div className="card p-4 border rounded">
+            <h2 className="text-lg font-semibold mb-2">Parâmetros de Investimentos</h2>
+            <p className="text-sm text-gray-600">Sem parâmetros configuráveis neste módulo no momento.</p>
+          </div>
+
+          {renderAuditSection('investments')}
         </div>
       )}
     </div>

@@ -17,6 +17,9 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - Parametros por modulo em `TenantParameter`, incluindo modulo `general`.
 - `TenantParameter` aceita modulo `finance`.
 - Auditoria de acoes do tenant via `TenantAuditLog` e endpoint dedicado.
+- Auditoria por modulo na tela de configuracoes (`Geral`, `Financas`, `Transportadora`, `Investimentos`) com secao dedicada em cada modulo.
+- Filtros de auditoria disponiveis por: modulo, busca geral, acao, tipo de entidade, email de usuario, periodo e limite de registros.
+- Historico de instalacao de modulos registrado em auditoria (`module_installed`) no fluxo de criacao de tenant (self-signup e admin de plataforma).
 - Governanca de contas SaaS por tenant:
   - `account_status` (`active`, `past_due`, `suspended`, `cancelled`)
   - `billing_due_date`
@@ -53,6 +56,7 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - Controle de manutencao e oleo via `MaintenanceLog` e `OilChangeLog`.
 - Alertas de revisao por data/km via `MaintenanceAlert`, com geracao por comando e task.
 - Perfil de veiculo reorganizado com secoes expansivas e campos de expansao iniciando recolhidos por padrao.
+- Historico de instalacoes de pneus removido da tela de veiculo e centralizado na auditoria para rastreabilidade unica.
 
 ### 2.4 Home e navegacao
 - Home dedicada em `/home` (nao redireciona mais para dashboards).
@@ -101,6 +105,7 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - `fintech-web/src/components/AppHeader.jsx`
   - `fintech-web/src/components/SuperUserRoute.jsx`
   - `fintech-web/src/services/reports.js`
+  - `fintech-web/src/services/tenantAudit.js`
   - `fintech-web/src/services/transport.js`
   - `fintech-web/src/services/auth.js`
 
@@ -150,6 +155,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - gatilho por km limite
   - idempotencia da geracao de alertas
 - Criar testes de permissao para endpoints de configuracao geral e auditoria.
+- Criar testes de filtro da auditoria por modulo/periodo/acao/entidade/usuario.
+- Criar testes para evento `module_installed` em criacao de tenant (self-signup e admin plataforma).
 - Criar testes de contrato para PDF (filtros + `fields` + `order_by/order_dir`).
 - Criar testes de bloqueio de conta por tenant (`past_due`, `suspended`, `cancelled`) no login.
 - Criar testes para self-signup (`users/register-account/`) com validacoes de slug/email/senha.
@@ -174,6 +181,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
 - Login foi modernizado com plano de fundo em `public/Plano de fundo Login.png`; alteracoes de arquivo/caminho podem quebrar o visual da tela.
 - Regras de pneus dependem de coerencia entre UI (campos por eixo/lado/posicao) e backend (validacao final); qualquer ajuste de layout deve manter o contrato da API.
 - Campos expansivos no perfil de veiculo iniciam recolhidos; alteracoes futuras devem evitar regressao de UX e de ordem de hooks no React.
+- Como o historico de instalacao saiu da tela de veiculos, qualquer analise operacional deve consultar a auditoria do modulo `transport`.
+- Ajustes no mapeamento `modulo -> entity_type` da auditoria exigem alinhamento entre backend e frontend para nao omitir eventos.
 
 ## 8) Rotina recomendada antes de deploy
 1. Backend: `python manage.py check`
@@ -188,6 +197,8 @@ Documento vivo para orientar evolucao do sistema, onboarding tecnico e manutenca
   - cadastrar/editar veiculo com eixos e rodagem dupla
   - registrar pneus atuais e validar bloqueio de duplicidade
   - executar rodizio de pneus e conferir posicoes
+  - validar que historico de instalacoes nao aparece na tela do veiculo
+  - validar auditoria da Transportadora com filtros (acao, periodo, entidade e usuario)
   - registrar manutencao/oleo e validar alertas de revisao
    - gerar PDF nos 3 modulos
   - validar tela de configuracoes gerais e aba Financas
