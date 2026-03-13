@@ -43,6 +43,14 @@ def _to_bool(value, default=False):
     return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
+def _to_list(value, default=None):
+    if value is None:
+        return default or []
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in str(value).split(',') if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -52,7 +60,13 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-6-0)e5z43uavh9%5-6sw@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+APP_ENV = config('APP_ENV', default=_read_env_file_value('APP_ENV', default='development'))
+IS_PRODUCTION = APP_ENV.lower() == 'production'
+
+ALLOWED_HOSTS = _to_list(
+    config('ALLOWED_HOSTS', default=_read_env_file_value('ALLOWED_HOSTS', default='localhost,127.0.0.1')),
+    default=['localhost', '127.0.0.1'],
+)
 
 
 # Application definition
@@ -79,6 +93,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -113,10 +128,47 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+DB_NAME = config('DB_NAME', default=_read_env_file_value('DB_NAME', default=''))
+DB_USER = config('DB_USER', default=_read_env_file_value('DB_USER', default=''))
+DB_PASSWORD = config('DB_PASSWORD', default=_read_env_file_value('DB_PASSWORD', default=''))
+DB_HOST = config('DB_HOST', default=_read_env_file_value('DB_HOST', default=''))
+DB_PORT = config('DB_PORT', default=_read_env_file_value('DB_PORT', default='5432'))
+DB_SSLMODE = config('DB_SSLMODE', default=_read_env_file_value('DB_SSLMODE', default='prefer'))
+DB_CONN_MAX_AGE = config(
+    'DB_CONN_MAX_AGE',
+    default=_read_env_file_value('DB_CONN_MAX_AGE', default='120'),
+    cast=int,
+)
+
+missing_db_vars = [
+    key
+    for key, value in {
+        'DB_NAME': DB_NAME,
+        'DB_USER': DB_USER,
+        'DB_PASSWORD': DB_PASSWORD,
+        'DB_HOST': DB_HOST,
+    }.items()
+    if not value
+]
+
+if missing_db_vars:
+    raise RuntimeError(
+        'Configuração de banco PostgreSQL incompleta. Defina as variáveis: '
+        + ', '.join(missing_db_vars)
+    )
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASSWORD,
+        'HOST': DB_HOST,
+        'PORT': DB_PORT,
+        'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+        'OPTIONS': {
+            'sslmode': DB_SSLMODE,
+        },
     }
 }
 
@@ -157,6 +209,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -223,16 +276,39 @@ SIMPLE_JWT = {
 # CORS Configuration
 # ============================================================================
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5174',
-]
+CORS_ALLOWED_ORIGINS = _to_list(
+    config(
+        'CORS_ALLOWED_ORIGINS',
+        default=_read_env_file_value(
+            'CORS_ALLOWED_ORIGINS',
+            default='http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174',
+        ),
+    ),
+)
+
+CSRF_TRUSTED_ORIGINS = _to_list(
+    config('CSRF_TRUSTED_ORIGINS', default=_read_env_file_value('CSRF_TRUSTED_ORIGINS', default='')),
+)
 
 CORS_ALLOW_CREDENTIALS = True
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = _to_bool(
+    config('SECURE_SSL_REDIRECT', default=_read_env_file_value('SECURE_SSL_REDIRECT', default='false')),
+    default=False,
+)
+SESSION_COOKIE_SECURE = _to_bool(
+    config('SESSION_COOKIE_SECURE', default=_read_env_file_value('SESSION_COOKIE_SECURE', default='false')),
+    default=False,
+)
+CSRF_COOKIE_SECURE = _to_bool(
+    config('CSRF_COOKIE_SECURE', default=_read_env_file_value('CSRF_COOKIE_SECURE', default='false')),
+    default=False,
+)
+
+if IS_PRODUCTION and not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # ============================================================================
 # Custom User Model

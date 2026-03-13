@@ -139,7 +139,7 @@ fintech-saas/                          # Backend Django
 │   ├── views.py                      # Endpoints de transações
 │   └── migrations/
 ├── manage.py                          # CLI do Django
-├── db.sqlite3                         # Banco de dados
+├── (sem banco local)                  # Banco PostgreSQL remoto
 ├── requirements.txt                   # Dependências Python
 ├── README.md                          # Documentação
 └── IMPLANTACAO.md                     # Este arquivo
@@ -829,17 +829,21 @@ curl http://localhost:8000/api/auth/login/
 # Recarregar página
 ```
 
-### Problema: "Database locked" no SQLite
+### Problema: "could not connect to server" no PostgreSQL
 
 **Solução:**
 ```bash
-# Remover arquivo de lock
-rm db.sqlite3-journal
+# Verificar host, porta e credenciais no .env
+# Exemplo:
+# DB_HOST=seu-servidor-postgres
+# DB_PORT=5432
+# DB_NAME=fintech
+# DB_USER=usuario
+# DB_PASSWORD=senha
 
-# Ou recriar banco
-rm db.sqlite3
-python manage.py migrate
-python manage.py seed_data
+# Testar conectividade de rede
+# Windows (PowerShell):
+Test-NetConnection seu-servidor-postgres -Port 5432
 ```
 
 ### Problema: "npm install" muito lento
@@ -892,7 +896,13 @@ Crie `.env` no backend:
 SECRET_KEY=sua-chave-secreta
 DEBUG=False
 ALLOWED_HOSTS=localhost,127.0.0.1
-DATABASE_URL=sqlite:///db.sqlite3
+DB_NAME=fintech
+DB_USER=postgres
+DB_PASSWORD=sua_senha_forte
+DB_HOST=seu-servidor-postgres
+DB_PORT=5432
+DB_SSLMODE=require
+DB_CONN_MAX_AGE=120
 ```
 
 Depois use:
@@ -921,11 +931,10 @@ console.log("DEBUG:", variavel);
 Se precisar recomeçar:
 
 ```bash
-# Deletar banco
-rm db.sqlite3
-
-# Recriar
+# Reaplicar migrations
 python manage.py migrate
+
+# (Opcional) Repopular dados de teste
 python manage.py seed_data
 ```
 

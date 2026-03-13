@@ -6,6 +6,7 @@ The `urlpatterns` list routes URLs to views. For more information please see:
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views import UserViewSet, TenantViewSet, CustomTokenObtainPairView
@@ -33,6 +34,7 @@ router.register(r'credit-card-invoices', CreditCardInvoiceViewSet, basename='cre
 from django.urls import re_path
 
 urlpatterns = [
+    path('healthz/', lambda request: JsonResponse({'status': 'ok'}), name='healthz'),
     # Admin
     path('admin/', admin.site.urls),
     
