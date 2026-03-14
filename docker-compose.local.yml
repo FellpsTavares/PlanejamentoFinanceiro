@@ -1,0 +1,14 @@
+services:
+  db:
+    env_file:
+      - ./fintech-saas/.env.docker.local
+    ports:
+      - "5432:5432"
+
+  backend:
+    env_file:
+      - ./fintech-saas/.env.docker.local
+
+  web:
+    ports:
+      - "8080:80"

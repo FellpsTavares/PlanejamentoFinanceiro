@@ -30,6 +30,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    const clearAuthAndRedirect = () => {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    };
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
@@ -40,20 +47,27 @@ api.interceptors.response.use(
             refresh: refreshToken,
           });
 
-          const { access } = response.data;
+          const { access, refresh } = response.data;
           localStorage.setItem('access_token', access);
+          if (refresh) {
+            localStorage.setItem('refresh_token', refresh);
+          }
 
           // Retry da requisição original
           originalRequest.headers.Authorization = `Bearer ${access}`;
           return api(originalRequest);
         }
+        clearAuthAndRedirect();
+        return Promise.reject(error);
       } catch (refreshError) {
         // Limpar tokens e redirecionar para login
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        clearAuthAndRedirect();
         return Promise.reject(refreshError);
       }
+    }
+
+    if (error.response?.status === 401 && originalRequest?._retry) {
+      clearAuthAndRedirect();
     }
 
     return Promise.reject(error);

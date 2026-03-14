@@ -32,25 +32,30 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.WARNING(f'v Tenant já existe: {tenant.name}'))
         
-        # 2. Criar usuário demo
-        user, created = User.objects.get_or_create(
-            email='demo@example.com',
+        # 2. Criar usuário administrador padrão
+        admin_email = 'fellipetavares@outlook.com'
+        admin_password = 'demo123456'
+
+        user, created = User.objects.update_or_create(
+            email=admin_email,
             tenant=tenant,
             defaults={
-                'username': 'demo',
-                'first_name': 'Demo',
-                'last_name': 'User',
+                'username': 'administrador',
+                'first_name': 'Administrador',
+                'last_name': '',
                 'is_verified': True,
                 'preferred_currency': 'BRL',
+                'role': User.ROLE_ADMIN,
+                'is_active': True,
             }
         )
-        
-        if created:
-            user.set_password('demo123456')
+
+        if created or not user.check_password(admin_password):
+            user.set_password(admin_password)
             user.save()
-            self.stdout.write(self.style.SUCCESS(f'v Usuário criado: {user.email}'))
+            self.stdout.write(self.style.SUCCESS(f'v Usuário administrador configurado: {user.email}'))
         else:
-            self.stdout.write(self.style.WARNING(f'v Usuário já existe: {user.email}'))
+            self.stdout.write(self.style.WARNING(f'v Usuário administrador já existe: {user.email}'))
         
         # 3. Criar categorias de receita
         income_categories = [
@@ -60,19 +65,21 @@ class Command(BaseCommand):
             {'name': 'Outros', 'icon': '🎁', 'color': '#F59E0B'},
         ]
         
-        for cat_data in income_categories:
-            category, created = Category.objects.get_or_create(
-                tenant=tenant,
-                name=cat_data['name'],
-                type='income',
-                defaults={
-                    'icon': cat_data['icon'],
-                    'color': cat_data['color'],
-                    'is_active': True,
-                }
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'v Categoria criada: {category.name}'))
+        tenants = Tenant.objects.all()
+        for current_tenant in tenants:
+            for cat_data in income_categories:
+                category, created = Category.objects.get_or_create(
+                    tenant=current_tenant,
+                    name=cat_data['name'],
+                    type='income',
+                    defaults={
+                        'icon': cat_data['icon'],
+                        'color': cat_data['color'],
+                        'is_active': True,
+                    }
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f'v Categoria (receita) criada: {category.name} | tenant={current_tenant.slug}'))
         
         # 4. Criar categorias de despesa
         expense_categories = [
@@ -86,19 +93,20 @@ class Command(BaseCommand):
             {'name': 'Outros', 'icon': '❓', 'color': '#64748B'},
         ]
         
-        for cat_data in expense_categories:
-            category, created = Category.objects.get_or_create(
-                tenant=tenant,
-                name=cat_data['name'],
-                type='expense',
-                defaults={
-                    'icon': cat_data['icon'],
-                    'color': cat_data['color'],
-                    'is_active': True,
-                }
-            )
-            if created:
-                self.stdout.write(self.style.SUCCESS(f'v Categoria criada: {category.name}'))
+        for current_tenant in tenants:
+            for cat_data in expense_categories:
+                category, created = Category.objects.get_or_create(
+                    tenant=current_tenant,
+                    name=cat_data['name'],
+                    type='expense',
+                    defaults={
+                        'icon': cat_data['icon'],
+                        'color': cat_data['color'],
+                        'is_active': True,
+                    }
+                )
+                if created:
+                    self.stdout.write(self.style.SUCCESS(f'v Categoria (despesa) criada: {category.name} | tenant={current_tenant.slug}'))
         
         # 5. Criar transações de exemplo
         today = datetime.now().date()
@@ -155,6 +163,7 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS('\nv Seed data concluído com sucesso!'))
         self.stdout.write(self.style.WARNING(f'\nCredenciais de teste:'))
-        self.stdout.write(f'Email: demo@example.com')
-        self.stdout.write(f'Senha: demo123456')
+        self.stdout.write(f'Email: {admin_email}')
+        self.stdout.write(f'Senha: {admin_password}')
+        self.stdout.write('Nome: Administrador')
         self.stdout.write(f'Tenant: demo')

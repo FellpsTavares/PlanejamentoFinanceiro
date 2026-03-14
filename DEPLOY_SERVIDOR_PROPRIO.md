@@ -1,22 +1,27 @@
-# Deploy em Servidor Próprio (Frontend + Backend)
+# Deploy em Servidor Próprio (Frontend + Backend + PostgreSQL)
 
 ## Arquitetura recomendada
 - Nginx servindo frontend estático (`fintech-web/dist`)
 - Nginx fazendo proxy de `/api`, `/admin` e `/healthz` para Gunicorn (Django)
 - Gunicorn executando `config.wsgi:application`
-- PostgreSQL remoto (Supabase já configurado)
+- PostgreSQL hospedado no mesmo servidor via Docker Compose
 
 ## 1) Backend - variáveis de ambiente
 Use `fintech-saas/.env` com base em `fintech-saas/.env.example`:
 - `APP_ENV=production`
 - `DEBUG=False`
-- `ALLOWED_HOSTS=seu-dominio.com`
-- `CORS_ALLOWED_ORIGINS=https://seu-dominio.com`
-- `CSRF_TRUSTED_ORIGINS=https://seu-dominio.com`
+- `ALLOWED_HOSTS=elofinanceiro.com.br,www.elofinanceiro.com.br`
+- `CORS_ALLOWED_ORIGINS=https://elofinanceiro.com.br,https://www.elofinanceiro.com.br`
+- `CSRF_TRUSTED_ORIGINS=https://elofinanceiro.com.br,https://www.elofinanceiro.com.br`
 - `SECURE_SSL_REDIRECT=true`
 - `SESSION_COOKIE_SECURE=true`
 - `CSRF_COOKIE_SECURE=true`
-- `DB_*` com dados do PostgreSQL remoto
+- `DB_NAME=elofinanceiro`
+- `DB_USER=elofinanceiro`
+- `DB_PASSWORD=troque_esta_senha_forte`
+- `DB_HOST=db`
+- `DB_PORT=5432`
+- `DB_SSLMODE=disable`
 
 ## 2) Backend - instalação e migração
 ```bash
@@ -51,7 +56,7 @@ VITE_API_URL=/api
 ```nginx
 server {
     listen 80;
-    server_name seu-dominio.com;
+    server_name elofinanceiro.com.br www.elofinanceiro.com.br;
 
     root /caminho/fintech-web/dist;
     index index.html;
@@ -85,8 +90,8 @@ server {
 ```
 
 ## 6) Smoke tests
-- `https://seu-dominio.com` abre frontend
-- `https://seu-dominio.com/healthz` retorna `{"status":"ok"}`
+- `https://elofinanceiro.com.br` abre frontend
+- `https://elofinanceiro.com.br/healthz` retorna `{"status":"ok"}`
 - Login funciona
 - Endpoint autenticado (`/api/users/me/`) retorna 200
 - Admin (`/admin/`) abre

@@ -109,6 +109,18 @@ out/
 .env.*.example
 !.env.example
 
+# Backend envs (manter apenas exemplos)
+fintech-saas/.env
+fintech-saas/.env.*
+!fintech-saas/.env.example
+!fintech-saas/.env.docker.local.example
+!fintech-saas/.env.docker.production.example
+
+# Frontend envs (manter apenas exemplos)
+fintech-web/.env
+fintech-web/.env.*
+!fintech-web/.env.example
+
 # Configuration files
 config.ini
 settings.local.py
@@ -212,6 +224,8 @@ docker-compose.override.yml
 *.temp
 *.bak
 *.backup
+fintech-saas/tmp_*.py
+fintech-saas/login_response.json
 
 # OS temp
 .~*
@@ -244,6 +258,7 @@ docker-compose.override.yml
 # Local documentation builds
 docs/_build/
 site/
+todo.md
 
 # ============================================================================
 # MONITORES / PROFILING
@@ -267,3 +282,6 @@ Desktop.ini
 # Lock files (uncomment if using specific package managers)
 # package-lock.json
 # yarn.lock
+
+deploy-operacional.txt
+deploy.txt

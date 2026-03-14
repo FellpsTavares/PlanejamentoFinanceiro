@@ -128,9 +128,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DB_NAME = config('DB_NAME', default=_read_env_file_value('DB_NAME', default=''))
-DB_USER = config('DB_USER', default=_read_env_file_value('DB_USER', default=''))
-DB_PASSWORD = config('DB_PASSWORD', default=_read_env_file_value('DB_PASSWORD', default=''))
+DB_NAME = config(
+    'DB_NAME',
+    default=config('POSTGRES_DB', default=_read_env_file_value('DB_NAME', default=_read_env_file_value('POSTGRES_DB', default=''))),
+)
+DB_USER = config(
+    'DB_USER',
+    default=config('POSTGRES_USER', default=_read_env_file_value('DB_USER', default=_read_env_file_value('POSTGRES_USER', default=''))),
+)
+DB_PASSWORD = config(
+    'DB_PASSWORD',
+    default=config('POSTGRES_PASSWORD', default=_read_env_file_value('DB_PASSWORD', default=_read_env_file_value('POSTGRES_PASSWORD', default=''))),
+)
 DB_HOST = config('DB_HOST', default=_read_env_file_value('DB_HOST', default=''))
 DB_PORT = config('DB_PORT', default=_read_env_file_value('DB_PORT', default='5432'))
 DB_SSLMODE = config('DB_SSLMODE', default=_read_env_file_value('DB_SSLMODE', default='prefer'))
@@ -207,9 +216,11 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -305,10 +316,33 @@ CSRF_COOKIE_SECURE = _to_bool(
     config('CSRF_COOKIE_SECURE', default=_read_env_file_value('CSRF_COOKIE_SECURE', default='false')),
     default=False,
 )
+SECURE_HSTS_SECONDS = config(
+    'SECURE_HSTS_SECONDS',
+    default=_read_env_file_value('SECURE_HSTS_SECONDS', default='0'),
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _to_bool(
+    config(
+        'SECURE_HSTS_INCLUDE_SUBDOMAINS',
+        default=_read_env_file_value('SECURE_HSTS_INCLUDE_SUBDOMAINS', default='false'),
+    ),
+    default=False,
+)
+SECURE_HSTS_PRELOAD = _to_bool(
+    config(
+        'SECURE_HSTS_PRELOAD',
+        default=_read_env_file_value('SECURE_HSTS_PRELOAD', default='false'),
+    ),
+    default=False,
+)
 
 if IS_PRODUCTION and not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    if SECURE_HSTS_SECONDS <= 0:
+        SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # ============================================================================
 # Custom User Model
