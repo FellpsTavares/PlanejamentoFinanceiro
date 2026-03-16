@@ -13,9 +13,9 @@ if (-not (Test-Path "fintech-saas/.env.docker.production")) {
 }
 
 Write-Host "Subindo stack local Docker..."
-docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.local.yml up -d --build
 
 Write-Host "Status dos serviços:"
-docker compose -f docker-compose.yml -f docker-compose.local.yml ps
+docker compose -f docker-compose.local.yml ps
 
 Write-Host "Concluído. Acesse: http://localhost:8080"

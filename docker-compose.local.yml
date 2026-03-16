@@ -1,19 +1,55 @@
 services:
   db:
+    image: postgres:16-alpine
+    container_name: elofinanceiro-db
+    restart: unless-stopped
     env_file:
       - ./fintech-saas/.env.docker.local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
     ports:
       - "5432:5432"
     volumes:
       - postgres_data_local:/var/lib/postgresql/data
 
   backend:
+    build:
+      context: ./fintech-saas
+      dockerfile: Dockerfile
+    container_name: elofinanceiro-backend
     env_file:
       - ./fintech-saas/.env.docker.local
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py ensure_platform_superuser &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - backend_media_local:/app/media
+      - backend_static_local:/app/staticfiles
 
   web:
+    build:
+      context: ./fintech-web
+      dockerfile: Dockerfile
+    container_name: elofinanceiro-web
+    depends_on:
+      - backend
+    restart: unless-stopped
     ports:
       - "8080:80"
+    volumes:
+      - backend_media_local:/srv/media:ro
+      - backend_static_local:/srv/static:ro
 
 volumes:
   postgres_data_local:
+  backend_media_local:
+  backend_static_local:

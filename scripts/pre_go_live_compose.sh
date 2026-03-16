@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.production.yml)
+COMPOSE=(docker compose -f docker-compose.yml)
 ENV_FILE="fintech-saas/.env.docker.production"
 SKIP_EXTERNAL="${1:-}"
 
