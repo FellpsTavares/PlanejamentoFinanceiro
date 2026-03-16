@@ -4,6 +4,8 @@ services:
       - ./fintech-saas/.env.docker.local
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
 
   backend:
     env_file:
@@ -12,3 +14,6 @@ services:
   web:
     ports:
       - "8080:80"
+
+volumes:
+  postgres_data_local:

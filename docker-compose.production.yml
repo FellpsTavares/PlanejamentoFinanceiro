@@ -1,4 +1,8 @@
 services:
+  db:
+    volumes:
+      - /media/devmon/DATA/dados-felps/postgres/data:/var/lib/postgresql/data
+
   web:
     command: >
       /bin/sh -c "if [ -f /etc/letsencrypt/live/elofinanceiro.com.br/fullchain.pem ] && [ -f /etc/letsencrypt/live/elofinanceiro.com.br/privkey.pem ]; then
