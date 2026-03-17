@@ -403,6 +403,7 @@ SECURE_SSL_REDIRECT = _to_bool(
     config('SECURE_SSL_REDIRECT', default=_read_env_file_value('SECURE_SSL_REDIRECT', default='false')),
     default=False,
 )
+SECURE_REDIRECT_EXEMPT = [r'^healthz/?$']
 SESSION_COOKIE_SECURE = _to_bool(
     config('SESSION_COOKIE_SECURE', default=_read_env_file_value('SESSION_COOKIE_SECURE', default='false')),
     default=False,
