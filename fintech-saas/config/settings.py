@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from urllib.parse import parse_qs, unquote, urlparse
 from decouple import AutoConfig
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -49,6 +50,25 @@ def _to_list(value, default=None):
     if isinstance(value, (list, tuple)):
         return [str(item).strip() for item in value if str(item).strip()]
     return [item.strip() for item in str(value).split(',') if item.strip()]
+
+
+def _parse_database_url(value: str) -> dict[str, str]:
+    if not value:
+        return {}
+
+    parsed = urlparse(value)
+    if parsed.scheme not in {'postgres', 'postgresql'}:
+        return {}
+
+    query = parse_qs(parsed.query)
+    return {
+        'NAME': unquote(parsed.path.lstrip('/')),
+        'USER': unquote(parsed.username or ''),
+        'PASSWORD': unquote(parsed.password or ''),
+        'HOST': parsed.hostname or '',
+        'PORT': str(parsed.port or ''),
+        'SSLMODE': query.get('sslmode', [''])[0],
+    }
 
 
 # Quick-start development settings - unsuitable for production
@@ -128,21 +148,96 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+DATABASE_URL = config(
+    'DATABASE_URL',
+    default=_read_env_file_value('DATABASE_URL', default=''),
+)
+DATABASE_URL_CONFIG = _parse_database_url(DATABASE_URL)
+
 DB_NAME = config(
     'DB_NAME',
-    default=config('POSTGRES_DB', default=_read_env_file_value('DB_NAME', default=_read_env_file_value('POSTGRES_DB', default=''))),
+    default=config(
+        'PGDATABASE',
+        default=config(
+            'POSTGRES_DB',
+            default=_read_env_file_value(
+                'DB_NAME',
+                default=_read_env_file_value(
+                    'PGDATABASE',
+                    default=_read_env_file_value(
+                        'POSTGRES_DB',
+                        default=DATABASE_URL_CONFIG.get('NAME', ''),
+                    ),
+                ),
+            ),
+        ),
+    ),
 )
 DB_USER = config(
     'DB_USER',
-    default=config('POSTGRES_USER', default=_read_env_file_value('DB_USER', default=_read_env_file_value('POSTGRES_USER', default=''))),
+    default=config(
+        'PGUSER',
+        default=config(
+            'POSTGRES_USER',
+            default=_read_env_file_value(
+                'DB_USER',
+                default=_read_env_file_value(
+                    'PGUSER',
+                    default=_read_env_file_value(
+                        'POSTGRES_USER',
+                        default=DATABASE_URL_CONFIG.get('USER', ''),
+                    ),
+                ),
+            ),
+        ),
+    ),
 )
 DB_PASSWORD = config(
     'DB_PASSWORD',
-    default=config('POSTGRES_PASSWORD', default=_read_env_file_value('DB_PASSWORD', default=_read_env_file_value('POSTGRES_PASSWORD', default=''))),
+    default=config(
+        'PGPASSWORD',
+        default=config(
+            'POSTGRES_PASSWORD',
+            default=_read_env_file_value(
+                'DB_PASSWORD',
+                default=_read_env_file_value(
+                    'PGPASSWORD',
+                    default=_read_env_file_value(
+                        'POSTGRES_PASSWORD',
+                        default=DATABASE_URL_CONFIG.get('PASSWORD', ''),
+                    ),
+                ),
+            ),
+        ),
+    ),
 )
-DB_HOST = config('DB_HOST', default=_read_env_file_value('DB_HOST', default=''))
-DB_PORT = config('DB_PORT', default=_read_env_file_value('DB_PORT', default='5432'))
-DB_SSLMODE = config('DB_SSLMODE', default=_read_env_file_value('DB_SSLMODE', default='prefer'))
+DB_HOST = config(
+    'DB_HOST',
+    default=config(
+        'PGHOST',
+        default=_read_env_file_value(
+            'DB_HOST',
+            default=_read_env_file_value('PGHOST', default=DATABASE_URL_CONFIG.get('HOST', '')),
+        ),
+    ),
+)
+DB_PORT = config(
+    'DB_PORT',
+    default=config(
+        'PGPORT',
+        default=_read_env_file_value(
+            'DB_PORT',
+            default=_read_env_file_value('PGPORT', default=DATABASE_URL_CONFIG.get('PORT', '5432') or '5432'),
+        ),
+    ),
+)
+DB_SSLMODE = config(
+    'DB_SSLMODE',
+    default=_read_env_file_value(
+        'DB_SSLMODE',
+        default=DATABASE_URL_CONFIG.get('SSLMODE', 'prefer') or 'prefer',
+    ),
+)
 DB_CONN_MAX_AGE = config(
     'DB_CONN_MAX_AGE',
     default=_read_env_file_value('DB_CONN_MAX_AGE', default='120'),
