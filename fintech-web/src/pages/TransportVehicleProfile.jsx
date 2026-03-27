@@ -6,6 +6,7 @@ import TransportEntryExpenseModal from '../components/TransportEntryExpenseModal
 import ConfirmModal from '../components/ConfirmModal';
 import TransportTripModal from '../components/TransportTripModal';
 import { toast } from '../utils/toast';
+import { formatDecimalStringToBRL, formatDecimalString } from '../utils/format';
 
 const MAX_AXLES_ALLOWED = 12;
 
@@ -89,8 +90,8 @@ export default function TransportVehicleProfile() {
   const [tripModalOpen, setTripModalOpen] = useState(false);
   const [tripModalInitial, setTripModalInitial] = useState(null);
 
-  const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const formatNumber = (value, minimumFractionDigits = 0, maximumFractionDigits = 3) => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits, maximumFractionDigits });
+  const formatBRL = (value) => formatDecimalStringToBRL(value, 2);
+  const formatNumber = (value, minimumFractionDigits = 0, maximumFractionDigits = 3) => formatDecimalString(value, Math.max(minimumFractionDigits, 0));
 
   const rawAxleCount = Number(vehicleForm.number_of_axles || vehicle?.number_of_axles || 2);
   const axleCount = Number.isFinite(rawAxleCount) ? Math.min(MAX_AXLES_ALLOWED, Math.max(1, rawAxleCount)) : 2;

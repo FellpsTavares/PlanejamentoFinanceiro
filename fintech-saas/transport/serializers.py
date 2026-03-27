@@ -63,12 +63,41 @@ class TripSerializer(serializers.ModelSerializer):
             'id', 'vehicle', 'date', 'start_date', 'end_date', 'modality', 'progress_type', 'tons', 'rate_per_ton',
             'days', 'daily_rate', 'total_value', 'is_received',
             'base_expense_value', 'fuel_expense_value', 'initial_km', 'final_km',
+            # novo: litros abastecidos e consumo calculado
+            'fuel_liters', 'consumption_km_per_liter', 'driver_is_owner',
             'status', 'driver_payment', 'expense_value', 'net_value', 'description'
         ]
-        read_only_fields = ['total_value']
+        read_only_fields = ['total_value', 'consumption_km_per_liter']
 
     def get_net_value(self, obj):
-        return float((obj.total_value or Decimal('0')) - (obj.expense_value or Decimal('0')))
+        # Incluir receitas adicionais do tipo 'trip' vinculadas ao veículo no período da viagem
+        try:
+            total_value = (obj.total_value or Decimal('0'))
+            expense_value = (obj.expense_value or Decimal('0'))
+
+            # determinar período da viagem
+            start = obj.start_date or obj.date
+            end = obj.end_date or obj.date
+            rev_extra = Decimal('0')
+            if obj.vehicle_id and start and end:
+                from django.db.models import Sum
+                rev_qs = TransportRevenue.objects.filter(vehicle=obj.vehicle, type='trip', date__gte=start, date__lte=end)
+                rev_sum = rev_qs.aggregate(total=Sum('amount'))['total'] or 0
+                rev_extra = Decimal(str(rev_sum))
+
+            # incluir receitas lançadas como movimentos da própria viagem
+            try:
+                mov_rev_sum = TripMovement.objects.filter(trip=obj, movement_type='revenue').aggregate(total=Sum('amount'))['total'] or 0
+                rev_extra = rev_extra + Decimal(str(mov_rev_sum))
+            except Exception:
+                # se TripMovement não estiver disponível por algum motivo, ignore
+                pass
+
+            net = total_value + rev_extra - expense_value
+            # Retornar string com valor exato (evita perdas de precisão ao converter para float)
+            return str(net)
+        except Exception:
+            return str((obj.total_value or Decimal('0')) - (obj.expense_value or Decimal('0')))
 
     def validate(self, data):
         modality = data.get('modality', getattr(self.instance, 'modality', None))
@@ -137,7 +166,13 @@ class TripSerializer(serializers.ModelSerializer):
     def _to_decimal(self, value):
         if value is None or value == '':
             return Decimal('0')
-        return Decimal(str(value))
+        # aceitar vírgula como separador decimal vindo do frontend (ex: '4,5')
+        try:
+            s = str(value).strip()
+            s = s.replace(',', '.')
+            return Decimal(s)
+        except Exception:
+            return Decimal('0')
 
     def _compute_values(self, validated_data, instance=None):
         modality = validated_data.get('modality', getattr(instance, 'modality', None))
@@ -180,7 +215,27 @@ class TripSerializer(serializers.ModelSerializer):
                 base_calc = total_value
             driver_payment = (base_calc * pct) / Decimal('100')
 
+        # se motorista é dono, zera pagamento ao motorista
+        driver_is_owner = bool(validated_data.get('driver_is_owner', getattr(instance, 'driver_is_owner', False)))
+        if driver_is_owner:
+            driver_payment = Decimal('0')
+
         expense_total = base_expense + fuel_expense + driver_payment
+
+        # calcular consumo se informado litros e km
+        try:
+            initial_km = validated_data.get('initial_km', getattr(instance, 'initial_km', None))
+            final_km = validated_data.get('final_km', getattr(instance, 'final_km', None))
+            fuel_liters = self._to_decimal(validated_data.get('fuel_liters', getattr(instance, 'fuel_liters', None)))
+            if initial_km is not None and final_km is not None and fuel_liters and fuel_liters > 0:
+                distance = Decimal(int(final_km) - int(initial_km))
+                consumption = distance / fuel_liters
+                validated_data['consumption_km_per_liter'] = consumption
+            else:
+                # não sobrescrever se não há dados completos
+                validated_data['consumption_km_per_liter'] = getattr(instance, 'consumption_km_per_liter', None)
+        except Exception:
+            validated_data['consumption_km_per_liter'] = getattr(instance, 'consumption_km_per_liter', None)
 
         validated_data['total_value'] = total_value
         validated_data['base_expense_value'] = base_expense

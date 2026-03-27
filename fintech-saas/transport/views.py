@@ -6,9 +6,10 @@ from django.db.models import Sum
 from django.db import transaction
 from django.utils.dateparse import parse_date
 from django.utils import timezone
+from decimal import Decimal
 
 from .models import Vehicle, TransportRevenue, TransportExpense
-from .models import Trip, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert
+from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert
 from .serializers import (
     VehicleSerializer,
     TransportRevenueSerializer,
@@ -230,22 +231,35 @@ class VehicleViewSet(viewsets.ModelViewSet):
                 exp_qs = exp_qs.filter(date__lte=e)
                 trip_qs = trip_qs.filter(date__lte=e)
 
-        revenues = rev_qs.aggregate(total=Sum('amount'))['total'] or 0
-        expenses = exp_qs.aggregate(total=Sum('amount'))['total'] or 0
+        revenues = rev_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        expenses = exp_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-        # Viagem entra na soma: receita apenas quando recebida, despesas sempre por gasto informado
-        trip_revenues = trip_qs.filter(is_received=True).aggregate(total=Sum('total_value'))['total'] or 0
-        trip_expenses = trip_qs.aggregate(total=Sum('expense_value'))['total'] or 0
+        # Viagem entra na soma: receita adicional pode vir de TransportRevenue (tipo 'trip')
+        # e também de lançamentos (TripMovement) do tipo 'revenue'. Despesas consideram expense_value das viagens.
+        trip_revenues = trip_qs.filter(is_received=True).aggregate(total=Sum('total_value'))['total'] or Decimal('0')
+        trip_expenses = trip_qs.aggregate(total=Sum('expense_value'))['total'] or Decimal('0')
 
-        revenues = revenues + trip_revenues
-        expenses = expenses + trip_expenses
+        # receitas vindas de movimentos ligados a viagens
+        movements_rev = TripMovement.objects.filter(trip__vehicle=vehicle, movement_type='revenue')
+        if start:
+            s = parse_date(start)
+            if s:
+                movements_rev = movements_rev.filter(date__gte=s)
+        if end:
+            e = parse_date(end)
+            if e:
+                movements_rev = movements_rev.filter(date__lte=e)
+        movements_rev_sum = movements_rev.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        revenues = Decimal(str(revenues)) + Decimal(str(trip_revenues)) + Decimal(str(movements_rev_sum))
+        expenses = Decimal(str(expenses)) + Decimal(str(trip_expenses))
         profit = revenues - expenses
 
         data = {
             'vehicle_id': str(vehicle.id),
-            'revenues_total': float(revenues),
-            'expenses_total': float(expenses),
-            'net_profit': float(profit),
+            'revenues_total': str(revenues),
+            'expenses_total': str(expenses),
+            'net_profit': str(profit),
         }
         return Response(data, status=status.HTTP_200_OK)
 

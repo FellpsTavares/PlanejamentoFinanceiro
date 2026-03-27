@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { transportService } from '../services/transport';
 import { Link } from 'react-router-dom';
+import { toast } from '../utils/toast';
 
 function Modal({ open, onClose, title, children }) {
   if (!open) return null;
@@ -76,12 +77,12 @@ export default function TransportVehicles() {
           };
           await transportService.createExpense(payload);
         }
-        import('../utils/toast').then(({ toast }) => toast('Registro criado com sucesso.', 'success'));
+        toast('Registro criado com sucesso.', 'success');
         setModalOpen(false);
       } catch (err) {
         console.error('Erro ao criar registro', err);
         const msg = err?.response?.data || err.message || 'Erro desconhecido';
-        import('../utils/toast').then(({ toast }) => toast(typeof msg === 'string' ? `Erro: ${msg}` : `Erro: ${JSON.stringify(msg)}`, 'error'));
+        toast(typeof msg === 'string' ? `Erro: ${msg}` : `Erro: ${JSON.stringify(msg)}`, 'error');
       }
     })();
   };

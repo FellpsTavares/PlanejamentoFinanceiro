@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
+import { formatDecimalStringToBRL, normalizeInputDecimal } from '../utils/format';
 
 export default function TransportTripModal({ open, onClose, vehicleId, initial, onSaved }) {
+  const navigate = useNavigate();
   const [modality, setModality] = useState('per_ton');
   const [tons, setTons] = useState('');
   const [ratePerTon, setRatePerTon] = useState('');
@@ -129,26 +132,48 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         payload.driver_payment = parseMoney(driverPayment || 0);
       }
       if (modality === 'per_ton') {
-        payload.tons = tons;
-        payload.rate_per_ton = parseMoney(ratePerTon);
+        // normalizar para enviar com ponto decimal
+        payload.tons = tons ? normalizeInputDecimal(String(tons)).trim() : null;
+        payload.rate_per_ton = ratePerTon ? normalizeInputDecimal(String(ratePerTon)).trim() : null;
       } else {
         payload.days = days;
-        payload.daily_rate = parseMoney(dailyRate);
+        payload.daily_rate = dailyRate ? normalizeInputDecimal(String(dailyRate)).trim() : null;
       }
+
+      // debug payload
+      console.debug('TransportTripModal payload', payload);
 
       if (initial?.id) {
         await transportService.updateTrip(initial.id, payload);
         toast('Viagem atualizada', 'success');
+        if (onSaved) await onSaved();
+        onClose();
       } else {
-        await transportService.createTrip(payload);
+        const created = await transportService.createTrip(payload);
         toast('Viagem criada', 'success');
+        if (onSaved) await onSaved();
+        // redireciona para gerenciar viagens com a nova viagem pré-selecionada
+        if (created && created.id) {
+          navigate(`/transport/trips?trip=${created.id}`);
+        } else {
+          onClose();
+        }
+        return;
       }
-
-      if (onSaved) await onSaved();
-      onClose();
     } catch (err) {
       console.error('Erro ao salvar viagem', err);
-      toast('Erro ao salvar viagem', 'error');
+      let msg = 'Erro ao salvar viagem';
+      try {
+        const d = err?.response?.data;
+        if (d) {
+          if (typeof d === 'string') msg = d;
+          else if (d.detail) msg = d.detail;
+          else msg = JSON.stringify(d);
+        }
+      } catch (e) {
+        // ignore
+      }
+      toast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -175,13 +200,13 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium">Toneladas</label>
-                <input className="input-field w-full" value={tons} onChange={(e) => setTons(e.target.value)} required />
+                <input className="input-field w-full" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" value={tons} onChange={(e) => setTons(e.target.value)} required />
               </div>
               <div>
                 <label className="block text-sm font-medium">Valor por Tonelada</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                  <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={ratePerTon} onChange={(e) => setRatePerTon(e.target.value)} required />
+                  <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={ratePerTon} onChange={(e) => setRatePerTon(e.target.value)} required />
                 </div>
               </div>
             </div>
@@ -191,13 +216,13 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium">Dias</label>
-                <input className="input-field w-full" value={days} onChange={(e) => setDays(e.target.value)} required />
+                <input className="input-field w-full" inputMode="numeric" pattern="[0-9]+" value={days} onChange={(e) => setDays(e.target.value)} required />
               </div>
               <div>
                 <label className="block text-sm font-medium">Valor Diário</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                  <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} required />
+                  <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} required />
                 </div>
               </div>
             </div>
@@ -233,14 +258,14 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
               <label className="block text-sm font-medium">Outros gastos da Viagem</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={baseExpenseValue} onChange={(e) => setBaseExpenseValue(e.target.value)} />
+                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={baseExpenseValue} onChange={(e) => setBaseExpenseValue(e.target.value)} />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium">Gasto de Combustível</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={fuelExpenseValue} onChange={(e) => setFuelExpenseValue(e.target.value)} />
+                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={fuelExpenseValue} onChange={(e) => setFuelExpenseValue(e.target.value)} />
               </div>
             </div>
           </div>
@@ -270,7 +295,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
               <label className="block text-sm font-medium">Pagamento do Motorista (manual)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={driverPayment} onChange={(e) => setDriverPayment(e.target.value)} />
+                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={driverPayment} onChange={(e) => setDriverPayment(e.target.value)} />
               </div>
             </div>
           ) : (
@@ -282,9 +307,9 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
             </div>
           )}
 
-          <div className="text-sm text-gray-700">Total previsto: <strong>{Number(preview || 0).toFixed(2)}</strong></div>
-          <div className="text-sm text-gray-700">Despesas previstas: <strong>R$ {Number(totalExpensePreview || 0).toFixed(2)}</strong></div>
-          <div className="text-sm font-semibold text-gray-800">Líquido previsto: <strong>R$ {Number(netPreview || 0).toFixed(2)}</strong></div>
+          <div className="text-sm text-gray-700">Total previsto: <strong>{formatDecimalStringToBRL(String(preview || 0))}</strong></div>
+          <div className="text-sm text-gray-700">Despesas previstas: <strong>{formatDecimalStringToBRL(String(totalExpensePreview || 0))}</strong></div>
+          <div className="text-sm font-semibold text-gray-800">Líquido previsto: <strong>{formatDecimalStringToBRL(String(netPreview || 0))}</strong></div>
 
           <div className="flex justify-end gap-2 pt-2 border-t mt-3 sticky bottom-0 bg-white">
             <button type="button" className="btn" onClick={onClose} disabled={saving}>Cancelar</button>

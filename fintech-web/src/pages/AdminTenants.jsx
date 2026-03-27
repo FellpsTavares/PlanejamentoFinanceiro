@@ -139,6 +139,41 @@ export default function AdminTenants() {
     await loadUsers(tenant.slug);
   };
 
+  const [editingModules, setEditingModules] = useState({
+    has_module_transport: false,
+    has_module_investments: false,
+  });
+
+  useEffect(() => {
+    if (selectedTenant) {
+      setEditingModules({
+        has_module_transport: !!selectedTenant.has_module_transport,
+        has_module_investments: !!selectedTenant.has_module_investments,
+      });
+    }
+  }, [selectedTenant]);
+
+  const handleModuleToggle = (e) => {
+    const { name, checked } = e.target;
+    setEditingModules((prev) => ({ ...prev, [name]: checked }));
+  };
+
+  const handleSaveModules = async () => {
+    if (!selectedTenant) return;
+    try {
+      await api.patch(`/tenants/${selectedTenant.slug}/modules/`, editingModules);
+      toast('Módulos atualizados', 'success');
+      await loadTenants();
+      // refresh selected tenant
+      const updated = (await api.get(`/tenants/${selectedTenant.slug}/`)).data;
+      setSelectedTenant(updated);
+    } catch (err) {
+      console.error('Erro ao salvar módulos', err);
+      const msg = err?.response?.data?.detail || 'Erro ao salvar módulos';
+      toast(msg, 'error');
+    }
+  };
+
   const handleUserChange = (e) => {
     const { name, value, type, checked } = e.target;
     setUserForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
@@ -319,6 +354,30 @@ export default function AdminTenants() {
 
           {selectedTenant && (
             <>
+              <div className="mb-4 p-3 border rounded bg-gray-50">
+                <h3 className="text-sm font-semibold mb-2">Configurações do Tenant</h3>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="has_module_transport"
+                      checked={editingModules.has_module_transport}
+                      onChange={handleModuleToggle}
+                    />
+                    Transportadora
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="has_module_investments"
+                      checked={editingModules.has_module_investments}
+                      onChange={handleModuleToggle}
+                    />
+                    Investimentos
+                  </label>
+                  <button className="btn btn-primary btn-sm" type="button" onClick={handleSaveModules}>Salvar módulos</button>
+                </div>
+              </div>
               <form onSubmit={handleCreateUser} className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-2">
                 <input name="username" value={userForm.username} onChange={handleUserChange} className="input-field" placeholder="Username" required />
                 <input name="email" type="email" value={userForm.email} onChange={handleUserChange} className="input-field" placeholder="Email" required />
