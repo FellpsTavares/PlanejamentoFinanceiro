@@ -528,3 +528,36 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         tenant.save(update_fields=['account_status', 'billing_due_date', 'is_active', 'account_notes', 'updated_at'])
 
         return Response(TenantSerializer(tenant).data)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated, IsPlatformAdmin],
+        url_path='modules'
+    )
+    def modules(self, request, slug=None):
+        """Atualiza flags de módulos do tenant (somente platform admin)."""
+        tenant = self.get_object()
+
+        updated = False
+        if 'has_module_transport' in request.data:
+            raw = request.data.get('has_module_transport')
+            tenant.has_module_transport = bool(raw) if isinstance(raw, bool) else str(raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+            updated = True
+        if 'has_module_investments' in request.data:
+            raw = request.data.get('has_module_investments')
+            tenant.has_module_investments = bool(raw) if isinstance(raw, bool) else str(raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+            updated = True
+
+        if updated:
+            tenant.save(update_fields=['has_module_transport', 'has_module_investments', 'updated_at'])
+            log_tenant_action(
+                tenant=tenant,
+                user=request.user,
+                action='module_flags_updated',
+                entity_type='tenant',
+                entity_id=str(tenant.id),
+                details={'has_module_transport': tenant.has_module_transport, 'has_module_investments': tenant.has_module_investments},
+            )
+
+        return Response(TenantSerializer(tenant).data)
