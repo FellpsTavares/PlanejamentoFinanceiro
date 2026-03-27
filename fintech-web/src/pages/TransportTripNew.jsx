@@ -4,6 +4,8 @@ import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import ConfirmModal from '../components/ConfirmModal';
+import { formatDecimalStringToBRL, normalizeInputDecimal } from '../utils/format';
+import { multiplyDecimalStrings, addDecimalStrings, subtractDecimalStrings, divideDecimalStringByInt } from '../utils/decimal';
 
 export default function TransportTripNew() {
   const navigate = useNavigate();
@@ -27,13 +29,16 @@ export default function TransportTripNew() {
   const [isReceived, setIsReceived] = useState(false);
   const [baseExpenseValue, setBaseExpenseValue] = useState('0');
   const [fuelExpenseValue, setFuelExpenseValue] = useState('0');
+  const [fuelLiters, setFuelLiters] = useState('');
   const [initialKm, setInitialKm] = useState('');
   const [finalKm, setFinalKm] = useState('');
   const [driverPayment, setDriverPayment] = useState('0');
   const [driverReceiveType, setDriverReceiveType] = useState('1');
   const [driverPct, setDriverPct] = useState('10');
   const [driverPctType, setDriverPctType] = useState('bruta');
+  const [driverIsOwner, setDriverIsOwner] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [previewRaw, setPreviewRaw] = useState(null);
 
   const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
 
@@ -73,6 +78,9 @@ export default function TransportTripNew() {
           setInitialKm(trip.initial_km != null ? String(trip.initial_km) : '');
           setFinalKm(trip.final_km != null ? String(trip.final_km) : '');
           setDriverPayment(trip.driver_payment != null ? String(trip.driver_payment) : '0');
+          setDriverIsOwner(Boolean(trip.driver_is_owner));
+          setFuelLiters(trip.fuel_liters != null ? String(trip.fuel_liters) : '');
+          setPreviewRaw(trip.total_value != null ? String(trip.total_value) : null);
           setPreview(Number(trip.total_value || 0));
         }
       } catch (err) {
@@ -95,35 +103,39 @@ export default function TransportTripNew() {
   const calculate = () => {
     try {
       if (modality === 'per_ton') {
-        const t = parseFloat(tons || 0);
-        const r = parseMoney(ratePerTon || 0);
-        const total = t * r;
-        setPreview(total);
+        // use precise decimal multiplication (accept comma decimal)
+        const totalStr = multiplyDecimalStrings(tons || '0', ratePerTon || '0');
+        setPreview(totalStr);
       } else {
-        const d = parseInt(days || 0, 10);
-        const dr = parseMoney(dailyRate || 0);
-        const total = d * dr;
-        setPreview(total);
+        const totalStr = multiplyDecimalStrings(String(days || '0'), dailyRate || '0');
+        setPreview(totalStr);
       }
     } catch (err) {
       setPreview(null);
     }
   };
 
-  const grossTotal = Number(preview || 0);
-  const baseExpense = parseMoney(baseExpenseValue || 0);
-  const fuelExpense = parseMoney(fuelExpenseValue || 0);
-  const manualDriver = parseMoney(driverPayment || 0);
-  const pctDriver = (() => {
-    const pct = parseMoney(driverPct || 0);
-    const calcBase = driverPctType === 'liquida'
-      ? Math.max(grossTotal - (baseExpense + fuelExpense), 0)
-      : grossTotal;
-    return (calcBase * pct) / 100;
-  })();
-  const driverPaymentPreview = driverReceiveType === '1' ? manualDriver : pctDriver;
-  const totalExpensePreview = baseExpense + fuelExpense + driverPaymentPreview;
-  const netPreview = grossTotal - totalExpensePreview;
+  // Use decimal string arithmetic for previews to avoid rounding
+  const grossTotalStr = preview ? String(preview) : '0';
+  const baseExpenseStr = normalizeInputDecimal(baseExpenseValue || '0');
+  const fuelExpenseStr = normalizeInputDecimal(fuelExpenseValue || '0');
+  const manualDriverStr = normalizeInputDecimal(driverPayment || '0');
+
+  // driver pct calculation: (base * pct) / 100
+  const pct = normalizeInputDecimal(driverPct || '0');
+  const calcBaseStr = driverPctType === 'liquida'
+    ? (() => {
+      const diff = subtractDecimalStrings(grossTotalStr, addDecimalStrings(baseExpenseStr, fuelExpenseStr));
+      // if negative, use 0
+      if (diff.startsWith('-')) return '0';
+      return diff;
+    })()
+    : grossTotalStr;
+  const pctMul = multiplyDecimalStrings(calcBaseStr, pct);
+  const pctDriverStr = divideDecimalStringByInt(pctMul, 100);
+  const driverPaymentPreviewStr = driverReceiveType === '1' ? manualDriverStr : pctDriverStr;
+  const totalExpensePreviewStr = addDecimalStrings(addDecimalStrings(baseExpenseStr, fuelExpenseStr), driverPaymentPreviewStr);
+  const netPreviewStr = subtractDecimalStrings(grossTotalStr, totalExpensePreviewStr);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -142,6 +154,8 @@ export default function TransportTripNew() {
       is_received: isReceived,
       base_expense_value: parseMoney(baseExpenseValue || 0),
       fuel_expense_value: parseMoney(fuelExpenseValue || 0),
+      fuel_liters: fuelLiters ? normalizeInputDecimal(fuelLiters) : null,
+      driver_is_owner: driverIsOwner,
       initial_km: initialKm === '' ? null : Number(initialKm),
       final_km: finalKm === '' ? null : Number(finalKm),
     };
@@ -149,12 +163,16 @@ export default function TransportTripNew() {
       payload.driver_payment = parseMoney(driverPayment || 0);
     }
     if (modality === 'per_ton') {
-      payload.tons = tons;
-      payload.rate_per_ton = parseMoney(ratePerTon);
+      // enviar toneladas e rate como string com ponto decimal (ex: '1.5')
+      payload.tons = tons ? normalizeInputDecimal(String(tons)).trim() : null;
+      payload.rate_per_ton = ratePerTon ? normalizeInputDecimal(String(ratePerTon)).trim() : null;
     } else {
       payload.days = days;
-      payload.daily_rate = parseMoney(dailyRate);
+      payload.daily_rate = dailyRate ? normalizeInputDecimal(String(dailyRate)).trim() : null;
     }
+
+    // log payload para depuração
+    console.debug('TransportTrip payload', payload);
 
     try {
       setSaving(true);
@@ -168,7 +186,18 @@ export default function TransportTripNew() {
       navigate(`/transport/vehicles/${vehicleId}`);
     } catch (err) {
       console.error('Erro salvando viagem', err);
-      toast('Erro ao salvar viagem', 'error');
+      let msg = 'Erro ao salvar viagem';
+      try {
+        const d = err?.response?.data;
+        if (d) {
+          if (typeof d === 'string') msg = d;
+          else if (d.detail) msg = d.detail;
+          else msg = JSON.stringify(d);
+        }
+      } catch (e) {
+        // ignore
+      }
+      toast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -223,13 +252,13 @@ export default function TransportTripNew() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium">Toneladas</label>
-              <input className="input-field w-full" value={tons} onChange={e => setTons(e.target.value)} />
+                <input className="input-field w-full" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" value={tons} onChange={e => setTons(e.target.value)} />
             </div>
             <div>
               <label className="block text-sm font-medium">Valor por Tonelada</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={ratePerTon} onChange={e => setRatePerTon(e.target.value)} />
+                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={ratePerTon} onChange={e => setRatePerTon(e.target.value)} />
               </div>
             </div>
           </div>
@@ -245,7 +274,7 @@ export default function TransportTripNew() {
               <label className="block text-sm font-medium">Valor Diário</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={dailyRate} onChange={e => setDailyRate(e.target.value)} />
+                <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={dailyRate} onChange={e => setDailyRate(e.target.value)} />
               </div>
             </div>
           </div>
@@ -281,14 +310,41 @@ export default function TransportTripNew() {
             <label className="block text-sm font-medium">Outros gastos da Viagem</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={baseExpenseValue} onChange={e => setBaseExpenseValue(e.target.value)} />
+              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={baseExpenseValue} onChange={e => setBaseExpenseValue(e.target.value)} />
             </div>
           </div>
           <div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium">Litros abastecidos</label>
+                <input
+                  className="input-field w-full"
+                  inputMode="decimal"
+                  pattern="[0-9]+([\.,][0-9]+)?"
+                  step="0.001"
+                  value={fuelLiters}
+                  onChange={e => setFuelLiters(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Consumo (km por litro) — previsto</label>
+                <div className="input-field w-full py-2">{(() => {
+                  const ik = Number(initialKm || 0);
+                  const fk = Number(finalKm || 0);
+                  const liters = Number(String(fuelLiters || '0').replace(',', '.'));
+                  if (ik && fk && liters > 0 && fk >= ik) {
+                    const dist = fk - ik;
+                    return (dist / liters).toFixed(3);
+                  }
+                  return '—';
+                })()}</div>
+              </div>
+            </div>
+
             <label className="block text-sm font-medium">Gasto de Combustível</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={fuelExpenseValue} onChange={e => setFuelExpenseValue(e.target.value)} />
+              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={fuelExpenseValue} onChange={e => setFuelExpenseValue(e.target.value)} />
             </div>
           </div>
         </div>
@@ -296,7 +352,7 @@ export default function TransportTripNew() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium">Quilometragem inicial</label>
-            <input className="input-field w-full" value={initialKm} onChange={e => setInitialKm(e.target.value)} />
+              <input className="input-field w-full" value={initialKm} onChange={e => setInitialKm(e.target.value)} />
           </div>
           <div>
             <label className="block text-sm font-medium">Quilometragem final</label>
@@ -318,12 +374,18 @@ export default function TransportTripNew() {
             <label className="block text-sm font-medium">Pagamento do Motorista (manual)</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} value={driverPayment} onChange={e => setDriverPayment(e.target.value)} />
+              <input className="input-field w-full" style={{ paddingLeft: '3rem' }} inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.01" value={driverPayment} onChange={e => setDriverPayment(e.target.value)} />
+            </div>
+            <div className="mt-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={driverIsOwner} onChange={(e) => setDriverIsOwner(e.target.checked)} />
+                Motorista é proprietário (sem pagamento ao motorista)
+              </label>
             </div>
           </div>
-        ) : (
+          ) : (
           <div className="text-sm text-gray-700">
-            Pagamento do motorista (automático): <strong>R$ {Number(driverPaymentPreview || 0).toFixed(2)}</strong>
+            Pagamento do motorista (automático): <strong>{formatDecimalStringToBRL(driverPaymentPreviewStr)}</strong>
             <div className="text-xs text-gray-500">
               Regra: {driverPct || 0}% sobre base {driverPctType === 'liquida' ? 'líquida' : 'bruta'}.
             </div>
@@ -332,10 +394,10 @@ export default function TransportTripNew() {
 
         <div className="flex items-center gap-2">
           <button type="button" onClick={calculate} className="btn btn-secondary">Calcular</button>
-          <div className="text-lg font-semibold">Total previsto: {preview != null ? preview.toFixed(2) : '—'}</div>
+          <div className="text-lg font-semibold">Total previsto: {previewRaw ? formatDecimalStringToBRL(previewRaw) : (preview != null ? formatDecimalStringToBRL(String(preview || 0)) : '—')}</div>
         </div>
-        <div className="text-sm text-gray-700">Despesas previstas: R$ {Number(totalExpensePreview || 0).toFixed(2)}</div>
-        <div className="text-sm font-semibold text-gray-800">Líquido previsto: R$ {Number(netPreview || 0).toFixed(2)}</div>
+        <div className="text-sm text-gray-700">Despesas previstas: {formatDecimalStringToBRL(totalExpensePreviewStr)}</div>
+        <div className="text-sm font-semibold text-gray-800">Líquido previsto: {formatDecimalStringToBRL(netPreviewStr)}</div>
 
         <div className="flex justify-between items-center">
           {tripId ? (

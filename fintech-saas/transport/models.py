@@ -140,6 +140,12 @@ class Trip(models.Model):
     fuel_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     initial_km = models.PositiveIntegerField(null=True, blank=True)
     final_km = models.PositiveIntegerField(null=True, blank=True)
+    # litros abastecidos durante a viagem (pode ser informado manualmente)
+    fuel_liters = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    # consumo médio calculado em km por litro (final_km - initial_km) / fuel_liters
+    consumption_km_per_liter = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    # indicar se o motorista é o próprio dono (nenhum pagamento ao motorista)
+    driver_is_owner = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
     driver_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
