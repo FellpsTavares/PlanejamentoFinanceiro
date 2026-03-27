@@ -68,7 +68,31 @@ class TripSerializer(serializers.ModelSerializer):
         read_only_fields = ['total_value']
 
     def get_net_value(self, obj):
-        return float((obj.total_value or Decimal('0')) - (obj.expense_value or Decimal('0')))
+        try:
+            total_value = (obj.total_value or Decimal('0'))
+            expense_value = (obj.expense_value or Decimal('0'))
+
+            # incluir receitas adicionais do tipo 'trip' vinculadas ao veículo no período da viagem
+            start = obj.start_date or obj.date
+            end = obj.end_date or obj.date
+            rev_extra = Decimal('0')
+            if obj.vehicle_id and start and end:
+                from django.db.models import Sum
+                rev_qs = TransportRevenue.objects.filter(vehicle=obj.vehicle, type='trip', date__gte=start, date__lte=end)
+                rev_sum = rev_qs.aggregate(total=Sum('amount'))['total'] or 0
+                rev_extra = Decimal(str(rev_sum))
+
+            # incluir receitas lançadas como movimentos da própria viagem
+            try:
+                mov_rev_sum = TripMovement.objects.filter(trip=obj, movement_type='revenue').aggregate(total=Sum('amount'))['total'] or 0
+                rev_extra = rev_extra + Decimal(str(mov_rev_sum))
+            except Exception:
+                pass
+
+            net = total_value + rev_extra - expense_value
+            return str(net)
+        except Exception:
+            return str((obj.total_value or Decimal('0')) - (obj.expense_value or Decimal('0')))
 
     def validate(self, data):
         modality = data.get('modality', getattr(self.instance, 'modality', None))
