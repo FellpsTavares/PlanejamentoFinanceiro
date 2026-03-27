@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { transportService } from '../services/transport';
+import { toast } from '../utils/toast';
 
 function formatDateDDMMYYYY(dateStr) {
   // dateStr in YYYY-MM-DD -> dd/MM/yyyy
@@ -71,7 +72,7 @@ export default function TransportEntryExpenseModal({ open, onClose, type, initia
     } catch (err) {
       console.error(err);
       const msg = err?.response?.data || err.message || '';
-      import('../utils/toast').then(({ toast }) => toast('Erro ao salvar: ' + (typeof msg === 'string' ? msg : JSON.stringify(msg)), 'error'));
+      toast('Erro ao salvar: ' + (typeof msg === 'string' ? msg : JSON.stringify(msg)), 'error');
     }
   };
 

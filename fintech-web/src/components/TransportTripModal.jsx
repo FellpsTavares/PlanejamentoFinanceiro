@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import { formatDecimalStringToBRL, normalizeInputDecimal } from '../utils/format';
 
 export default function TransportTripModal({ open, onClose, vehicleId, initial, onSaved }) {
+  const navigate = useNavigate();
   const [modality, setModality] = useState('per_ton');
   const [tons, setTons] = useState('');
   const [ratePerTon, setRatePerTon] = useState('');
@@ -144,13 +146,20 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
       if (initial?.id) {
         await transportService.updateTrip(initial.id, payload);
         toast('Viagem atualizada', 'success');
+        if (onSaved) await onSaved();
+        onClose();
       } else {
-        await transportService.createTrip(payload);
+        const created = await transportService.createTrip(payload);
         toast('Viagem criada', 'success');
+        if (onSaved) await onSaved();
+        // redireciona para gerenciar viagens com a nova viagem pré-selecionada
+        if (created && created.id) {
+          navigate(`/transport/trips?trip=${created.id}`);
+        } else {
+          onClose();
+        }
+        return;
       }
-
-      if (onSaved) await onSaved();
-      onClose();
     } catch (err) {
       console.error('Erro ao salvar viagem', err);
       let msg = 'Erro ao salvar viagem';

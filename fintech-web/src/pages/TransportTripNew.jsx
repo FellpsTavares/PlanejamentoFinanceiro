@@ -174,16 +174,22 @@ export default function TransportTripNew() {
     // log payload para depuração
     console.debug('TransportTrip payload', payload);
 
-    try {
+      try {
       setSaving(true);
       if (tripId) {
         await transportService.updateTrip(tripId, payload);
         toast('Viagem atualizada', 'success');
+        navigate(`/transport/trips?trip=${tripId}`);
       } else {
-        await transportService.createTrip(payload);
+        const created = await transportService.createTrip(payload);
         toast('Viagem criada', 'success');
+        // redireciona para a tela de gerenciar viagens com a nova viagem pré-selecionada
+        if (created && created.id) {
+          navigate(`/transport/trips?trip=${created.id}`);
+        } else {
+          navigate('/transport/trips');
+        }
       }
-      navigate(`/transport/vehicles/${vehicleId}`);
     } catch (err) {
       console.error('Erro salvando viagem', err);
       let msg = 'Erro ao salvar viagem';
