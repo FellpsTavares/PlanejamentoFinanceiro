@@ -500,62 +500,63 @@ class ReportViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def _build_pdf(self, title, subtitle, summary_items, columns, rows):
+        # Usando Platypus para gerar um PDF mais moderno e com tabela estilizada
         from reportlab.lib.pagesizes import A4
-        from reportlab.pdfgen import canvas
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.units import mm
 
         buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        y = height - 50
+        doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=20 * mm, bottomMargin=18 * mm)
 
-        pdf.setFont('Helvetica-Bold', 16)
-        pdf.drawString(40, y, title)
-        y -= 20
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, spaceAfter=6)
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.grey, spaceAfter=10)
+        small_bold = ParagraphStyle('SmallBold', parent=styles['Heading4'], fontName='Helvetica-Bold', fontSize=10)
+        normal = styles['Normal']
 
-        pdf.setFont('Helvetica', 9)
-        pdf.drawString(40, y, subtitle)
-        y -= 24
+        story = []
 
-        pdf.setFont('Helvetica-Bold', 11)
-        pdf.drawString(40, y, 'Resumo Executivo')
-        y -= 16
+        # Cabeçalho
+        story.append(Paragraph(title, title_style))
+        story.append(Paragraph(subtitle, subtitle_style))
 
-        pdf.setFont('Helvetica', 9)
+        # Resumo executivo
+        story.append(Paragraph('Resumo Executivo', small_bold))
         for item in summary_items:
-            pdf.drawString(48, y, f"• {item}")
-            y -= 14
+            story.append(Paragraph(f'• {item}', normal))
+        story.append(Spacer(1, 8))
 
-        y -= 6
-        pdf.setFont('Helvetica-Bold', 11)
-        pdf.drawString(40, y, 'Detalhamento')
-        y -= 16
-
-        col_width = (width - 80) / max(1, len(columns))
-        pdf.setFont('Helvetica-Bold', 8)
-        for idx, col in enumerate(columns):
-            pdf.drawString(40 + idx * col_width, y, str(col)[:28])
-        y -= 12
-        pdf.line(40, y, width - 40, y)
-        y -= 12
-
-        pdf.setFont('Helvetica', 8)
+        # Detalhamento em tabela
+        story.append(Paragraph('Detalhamento', small_bold))
+        table_data = [columns]
         for row in rows:
-            if y < 60:
-                pdf.showPage()
-                y = height - 50
-                pdf.setFont('Helvetica-Bold', 8)
-                for idx, col in enumerate(columns):
-                    pdf.drawString(40 + idx * col_width, y, str(col)[:28])
-                y -= 12
-                pdf.line(40, y, width - 40, y)
-                y -= 12
-                pdf.setFont('Helvetica', 8)
+            # garantir que todas as células sejam strings e com limite de caracteres razoável
+            table_data.append([str(cell) if cell is not None else '' for cell in row])
 
-            for idx, col in enumerate(row):
-                pdf.drawString(40 + idx * col_width, y, str(col)[:28])
-            y -= 12
+        # Estilo da tabela: cabeçalho com fundo suave, linhas alternadas e bordas sutis
+        tbl = Table(table_data, repeatRows=1, hAlign='LEFT')
+        tbl_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+            ('TOPPADDING', (0, 0), (-1, 0), 6),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#E5E7EB')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFAFB')]),
+        ])
+        tbl.setStyle(tbl_style)
 
-        pdf.save()
+        story.append(tbl)
+        story.append(Spacer(1, 12))
+
+        # Rodapé simples com data
+        generated_at = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+        story.append(Paragraph(f'Relatório gerado em: {generated_at}', ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey)))
+
+        doc.build(story)
         buffer.seek(0)
         return buffer.getvalue()
 
@@ -659,13 +660,18 @@ class ReportViewSet(viewsets.ViewSet):
 
         order_by = (request.query_params.get('order_by') or '').strip()
         order_dir = (request.query_params.get('order_dir') or 'desc').strip().lower()
-        allowed_order = {'start_date', 'end_date', 'status', 'total_value', 'expense_value'}
+        # Permitir ordenação por veículo e status além das datas e valores
+        allowed_order = {'start_date', 'end_date', 'status', 'total_value', 'expense_value', 'vehicle'}
         if order_by in allowed_order:
             if order_by == 'start_date':
                 if order_dir == 'desc':
                     trips = trips.order_by('-start_date', '-date', '-id')
                 else:
                     trips = trips.order_by('start_date', 'date', 'id')
+            elif order_by == 'vehicle':
+                # ordenar por placa do veículo (se disponível)
+                prefix = '-' if order_dir == 'desc' else ''
+                trips = trips.order_by(f'{prefix}vehicle__plate', '-id')
             else:
                 prefix = '-' if order_dir == 'desc' else ''
                 trips = trips.order_by(f'{prefix}{order_by}', '-id')

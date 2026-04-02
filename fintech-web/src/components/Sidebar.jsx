@@ -52,18 +52,16 @@ export default function Sidebar() {
     }
 
     const settingsItems = [{ to: '/settings/modules', label: 'Configurações' }];
-    if (user?.is_platform_admin) {
-      settingsItems.push({ to: '/admin/tenants', label: 'Admin Tenants' });
-    }
+    // Removido item "Admin Tenants" — funcionalidade removida para manter código limpo
     if (user?.is_superuser) {
-      settingsItems.push({ to: '/admin/accounts', label: 'Gerenciar Contas' });
+      settingsItems.push({ to: '/admin/user-management', label: 'Gerenciar Usuários' });
     }
 
     list.push({
       key: 'settings',
       label: 'Configurações',
       icon: '⚙',
-      active: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/tenants') || location.pathname.startsWith('/admin/accounts'),
+      active: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/user-management'),
       items: settingsItems,
     });
 

@@ -10,7 +10,7 @@ from .models import Tenant, TenantParameter, TenantAuditLog
 from .audit import log_tenant_action
 from .serializers import (
     UserSerializer, UserCreateSerializer, TenantSerializer,
-    CustomTokenObtainPairSerializer, TenantAdminCreateSerializer,
+    CustomTokenObtainPairSerializer,
     TenantAdminUserCreateSerializer, TenantAdminUserUpdateSerializer,
     TenantParameterSerializer, TenantAuditLogSerializer, AccountSelfSignupSerializer,
 )
@@ -205,8 +205,42 @@ class UserViewSet(viewsets.ModelViewSet):
         )
         return Response(UserSerializer(user).data)
 
+    @action(
+        detail=False,
+        methods=['post'],
+        permission_classes=[IsAuthenticated],
+        url_path='change-password'
+    )
+    def change_password(self, request):
+        """Permite ao usuário autenticado alterar a própria senha (reseta must_change_password)."""
+        new_password = str(request.data.get('new_password', '')).strip()
+        confirm_password = str(request.data.get('confirm_password', '')).strip()
 
-class TenantViewSet(viewsets.ReadOnlyModelViewSet):
+        if len(new_password) < 8:
+            return Response(
+                {'new_password': ['A nova senha deve ter pelo menos 8 caracteres.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_password != confirm_password:
+            return Response(
+                {'confirm_password': ['As senhas não coincidem.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        user.set_password(new_password)
+        user.must_change_password = False
+        user.save(update_fields=['password', 'must_change_password'])
+
+        log_tenant_action(
+            tenant=user.tenant,
+            user=user,
+            action='password_changed',
+            entity_type='user',
+            entity_id=str(user.id),
+            details={'source': 'forced_change'},
+        )
+        return Response({'detail': 'Senha alterada com sucesso.'})
     """
     ViewSet para visualizar informações do Tenant.
     """
@@ -222,8 +256,6 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         return Tenant.objects.filter(is_active=True)
 
     def get_serializer_class(self):
-        if self.action == 'create_tenant':
-            return TenantAdminCreateSerializer
         return TenantSerializer
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -233,31 +265,7 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(tenant)
         return Response(serializer.data)
 
-    @action(
-        detail=False,
-        methods=['post'],
-        permission_classes=[IsAuthenticated, IsPlatformAdmin],
-        url_path='create'
-    )
-    def create_tenant(self, request):
-        """Cria novo tenant (somente admin de plataforma)."""
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        tenant = serializer.save()
-        log_tenant_action(
-            tenant=tenant,
-            user=request.user,
-            action='tenant_created',
-            entity_type='tenant',
-            entity_id=str(tenant.id),
-            details={
-                'module': TenantParameter.MODULE_GENERAL,
-                'source': 'platform_admin',
-                'tenant_slug': tenant.slug,
-            },
-        )
-        _log_module_installations(tenant=tenant, user=request.user, source='platform_admin')
-        return Response(TenantSerializer(tenant).data, status=status.HTTP_201_CREATED)
+    # create_tenant endpoint removed (Admin Tenants feature deprecated)
 
     @action(
         detail=True,
@@ -293,17 +301,30 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(
         detail=True,
-        methods=['patch'],
+        methods=['patch', 'delete'],
         permission_classes=[IsAuthenticated, IsPlatformAdmin],
         url_path=r'users/(?P<user_id>[^/.]+)'
     )
     def update_user(self, request, slug=None, user_id=None):
-        """Atualiza dados/papel/ativo de usuário do tenant (somente admin de plataforma)."""
+        """Atualiza ou remove usuário do tenant (somente admin de plataforma/superusuário)."""
         tenant = self.get_object()
         try:
             user = User.objects.get(id=user_id, tenant=tenant)
         except User.DoesNotExist:
             return Response({'detail': 'Usuário não encontrado neste tenant.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if request.method.lower() == 'delete':
+            user_email = user.email
+            user.delete()
+            log_tenant_action(
+                tenant=tenant,
+                user=request.user,
+                action='user_deleted',
+                entity_type='user',
+                entity_id=user_id,
+                details={'email': user_email},
+            )
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
         serializer = TenantAdminUserUpdateSerializer(user, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -527,6 +548,28 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
             tenant.account_notes = str(request.data.get('account_notes') or '')
         tenant.save(update_fields=['account_status', 'billing_due_date', 'is_active', 'account_notes', 'updated_at'])
 
+        return Response(TenantSerializer(tenant).data)
+
+    @action(
+        detail=True,
+        methods=['patch'],
+        permission_classes=[IsAuthenticated, IsSuperUserOnly],
+        url_path='admin-update'
+    )
+    def update_tenant_admin(self, request, slug=None):
+        """Atualiza dados completos do tenant (somente superusuário)."""
+        tenant = self.get_object()
+        serializer = TenantSerializer(tenant, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        log_tenant_action(
+            tenant=tenant,
+            user=request.user,
+            action='tenant_updated',
+            entity_type='tenant',
+            entity_id=str(tenant.id),
+            details={'updated_fields': list(request.data.keys())},
+        )
         return Response(TenantSerializer(tenant).data)
 
     @action(

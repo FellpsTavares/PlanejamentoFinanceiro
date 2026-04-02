@@ -95,8 +95,12 @@ export default function Login() {
     setError('');
 
     try {
-      await authService.login(formData.email, formData.password);
-      navigate('/home');
+      const result = await authService.login(formData.email, formData.password);
+      if (result?.user?.must_change_password) {
+        navigate('/change-password');
+      } else {
+        navigate('/home');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Erro ao fazer login');
     } finally {
