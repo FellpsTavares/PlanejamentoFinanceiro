@@ -135,10 +135,10 @@ class TripSerializer(serializers.ModelSerializer):
         if initial_km is not None and final_km is not None and int(final_km) < int(initial_km):
             raise serializers.ValidationError('A quilometragem final deve ser maior ou igual à inicial.')
 
+        # Allow closing a trip without a final_km (optional).
         status = data.get('status', getattr(self.instance, 'status', None))
         final_km_for_status = data.get('final_km', getattr(self.instance, 'final_km', None))
-        if status == 'completed' and final_km_for_status is None:
-            raise serializers.ValidationError('Para encerrar a viagem, informe a quilometragem final.')
+        # Previous behavior required final_km to close; now it's optional.
 
         start_date = data.get('start_date', getattr(self.instance, 'start_date', None))
         end_date = data.get('end_date', getattr(self.instance, 'end_date', None))
