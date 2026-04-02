@@ -241,6 +241,8 @@ class UserViewSet(viewsets.ModelViewSet):
             details={'source': 'forced_change'},
         )
         return Response({'detail': 'Senha alterada com sucesso.'})
+
+class TenantViewSet(viewsets.ModelViewSet):
     """
     ViewSet para visualizar informações do Tenant.
     """
