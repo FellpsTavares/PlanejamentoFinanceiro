@@ -52,3 +52,15 @@ urlpatterns = [
     # Assistente operacional (chat)
     path('api/assistant/', include('finance.assistant_urls')),
 ]
+
+# Aliases (backwards-compatible, não removem rotas originais)
+# Esses aliases usam nomes amigáveis/pt-br e basenames distintos para evitar colisões de nomes de URL.
+router.register(r'usuarios', UserViewSet, basename='user_alias')
+router.register(r'contas', TenantViewSet, basename='tenant_alias')
+router.register(r'categorias', CategoryViewSet, basename='category_alias')
+router.register(r'transacoes', TransactionViewSet, basename='transaction_alias')
+router.register(r'recorrentes', RecurringTransactionViewSet, basename='recurring_alias')
+router.register(r'investimentos', InvestmentViewSet, basename='investment_alias')
+router.register(r'relatorios', ReportViewSet, basename='report_alias')
+router.register(r'formas-pagamento', PaymentMethodViewSet, basename='payment-method_alias')
+router.register(r'faturas-cartao', CreditCardInvoiceViewSet, basename='credit-card-invoice_alias')
