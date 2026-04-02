@@ -70,5 +70,7 @@ export function formatQuantityDisplay(value) {
   if (Number.isNaN(n)) n = Number(s.replace(/\./g, '').replace(',', '.'));
   if (Number.isNaN(n)) return s;
   if (Number.isInteger(n)) return String(n);
-  return n.toFixed(3).replace(/\.?0+$/, '');
+  // format with up to 3 decimals, using comma as decimal separator (BR)
+  const with3 = n.toFixed(3).replace(/\.?0+$/, '');
+  return with3.replace('.', ',');
 }
