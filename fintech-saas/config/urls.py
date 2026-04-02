@@ -22,28 +22,15 @@ from finance.views import (
 
 # Criar router para ViewSets
 router = DefaultRouter()
-# Registrar rotas principais em Português (caminhos canônicos)
-router.register(r'usuarios', UserViewSet, basename='user')
-router.register(r'contas', TenantViewSet, basename='tenant')
-router.register(r'categorias', CategoryViewSet, basename='category')
-router.register(r'transacoes', TransactionViewSet, basename='transaction')
-router.register(r'recorrentes', RecurringTransactionViewSet, basename='recurring')
-router.register(r'investimentos', InvestmentViewSet, basename='investment')
-router.register(r'relatorios', ReportViewSet, basename='report')
-router.register(r'formas-pagamento', PaymentMethodViewSet, basename='payment-method')
-router.register(r'faturas-cartao', CreditCardInvoiceViewSet, basename='credit-card-invoice')
-# Aliases (backwards-compatible, não removem rotas originais)
-# Esses aliases usam nomes amigáveis/pt-br e basenames distintos para evitar colisões de nomes de URL.
-# Mantemos as rotas em inglês como aliases (compatibilidade reversa)
-router.register(r'users', UserViewSet, basename='user_alias')
-router.register(r'tenants', TenantViewSet, basename='tenant_alias')
-router.register(r'categories', CategoryViewSet, basename='category_alias')
-router.register(r'transactions', TransactionViewSet, basename='transaction_alias')
-router.register(r'recurrings', RecurringTransactionViewSet, basename='recurring_alias')
-router.register(r'investments', InvestmentViewSet, basename='investment_alias')
-router.register(r'reports', ReportViewSet, basename='report_alias')
-router.register(r'payment-methods', PaymentMethodViewSet, basename='payment-method_alias')
-router.register(r'credit-card-invoices', CreditCardInvoiceViewSet, basename='credit-card-invoice_alias')
+router.register(r'users', UserViewSet, basename='user')
+router.register(r'tenants', TenantViewSet, basename='tenant')
+router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'transactions', TransactionViewSet, basename='transaction')
+router.register(r'recurrings', RecurringTransactionViewSet, basename='recurring')
+router.register(r'investments', InvestmentViewSet, basename='investment')
+router.register(r'reports', ReportViewSet, basename='report')
+router.register(r'payment-methods', PaymentMethodViewSet, basename='payment-method')
+router.register(r'credit-card-invoices', CreditCardInvoiceViewSet, basename='credit-card-invoice')
 from django.urls import re_path
 
 urlpatterns = [
@@ -65,5 +52,3 @@ urlpatterns = [
     # Assistente operacional (chat)
     path('api/assistant/', include('finance.assistant_urls')),
 ]
-
-
