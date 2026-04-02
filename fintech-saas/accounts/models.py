@@ -102,6 +102,9 @@ class User(AbstractUser):
         verbose_name=_('Moeda Preferida')
     )
     
+    # Autenticação
+    must_change_password = models.BooleanField(default=False, verbose_name=_('Deve alterar senha'))
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Criado em'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Atualizado em'))

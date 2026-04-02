@@ -20,9 +20,11 @@ import TransportVehicleProfile from './pages/TransportVehicleProfile';
 import TransportVehicleNew from './pages/TransportVehicleNew';
 import TransportTripNew from './pages/TransportTripNew';
 import TransportTrips from './pages/TransportTrips';
-import AdminTenants from './pages/AdminTenants';
 import ModuleSettings from './pages/ModuleSettings';
 import AccountManagement from './pages/AccountManagement';
+import AdminUserManagement from './pages/AdminUserManagement';
+import ChangePassword from './pages/ChangePassword';
+ 
 
 export default function App() {
   useEffect(() => {
@@ -37,6 +39,9 @@ export default function App() {
       <Routes>
         {/* Rota de Login */}
         <Route path="/login" element={<Login />} />
+
+        {/* Rota de troca de senha forçada (sem sidebar) */}
+        <Route path="/change-password" element={<ChangePassword />} />
 
         {/* Rotas Protegidas */}
         <Route
@@ -102,21 +107,11 @@ export default function App() {
           }
         />
         <Route
-          path="/admin/tenants"
-          element={
-            <ProtectedRoute>
-              <PlatformAdminRoute>
-                <AdminTenants />
-              </PlatformAdminRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/accounts"
+          path="/admin/user-management"
           element={
             <ProtectedRoute>
               <SuperUserRoute>
-                <AccountManagement />
+                <AdminUserManagement />
               </SuperUserRoute>
             </ProtectedRoute>
           }
