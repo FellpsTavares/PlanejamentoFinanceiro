@@ -29,14 +29,58 @@ export default function TransportTrips() {
   const [finalKm, setFinalKm] = useState('');
   const [description, setDescription] = useState('');
   const [isReceived, setIsReceived] = useState(false);
+  const [filterText, setFilterText] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [vehicles, setVehicles] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showInProgressExpanded, setShowInProgressExpanded] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const formatApiDate = (value) => {
+    if (!value) return '—';
+    const s = String(value).slice(0, 10);
+    const parts = s.split('-');
+    if (parts.length === 3) {
+      const [y, m, d] = parts;
+      return `${d}/${m}/${y}`;
+    }
+    return value;
+  };
+  const tripDateForFilter = (trip) => {
+    const d = trip.start_date || trip.date || trip.end_date || '';
+    return String(d).slice(0, 10);
+  };
 
-  const loadTrips = async () => {
+  const tripInDateRange = (trip) => {
+    if (!filterStartDate && !filterEndDate) return true;
+    const d = tripDateForFilter(trip);
+    if (!d) return false;
+    const start = filterStartDate || filterEndDate || '';
+    const end = filterEndDate || filterStartDate || '';
+    if (!start || !end) return true;
+    return d >= start && d <= end;
+  };
+
+  const tripMatchesSearch = (trip) => {
+    // if a vehicle is explicitly selected, match exact plate
+    if (selectedVehicle && String(selectedVehicle).trim()) {
+      return String(trip.vehicle_plate || '').trim() === String(selectedVehicle).trim();
+    }
+    if (!searchQuery || !String(searchQuery).trim()) return true;
+    const q = String(searchQuery).toLowerCase().trim();
+    const plate = String(trip.vehicle_plate || '').toLowerCase();
+    return plate.includes(q);
+  };
+
+  const loadTrips = async (params = {}) => {
     setLoading(true);
     try {
-      const data = await transportService.getTrips();
+      const data = await transportService.getTrips(params);
       const items = data?.results || data || [];
       setTrips(items);
       const tripFromQuery = searchParams.get('trip');
@@ -52,6 +96,16 @@ export default function TransportTrips() {
       toast('Erro ao carregar viagens', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadVehicles = async () => {
+    try {
+      const data = await transportService.getVehicles();
+      const items = data?.results || data || [];
+      setVehicles(items);
+    } catch (err) {
+      console.error('Erro ao carregar veículos', err);
     }
   };
 
@@ -86,11 +140,16 @@ export default function TransportTrips() {
   useEffect(() => {
     loadTrips();
     loadTransportSettings();
+    loadVehicles();
   }, [searchParams]);
 
   const selectedTrip = useMemo(() => {
     return trips.find((trip) => String(trip.id) === String(selectedTripId));
   }, [trips, selectedTripId]);
+
+  const vehicleOptions = useMemo(() => {
+    return (vehicles || []).map((v) => v.plate || v.registration || v.name || String(v.id));
+  }, [vehicles]);
 
   useEffect(() => {
     if (!selectedTrip) return;
@@ -139,10 +198,7 @@ export default function TransportTrips() {
 
   const handleCompleteTrip = async () => {
     if (!selectedTrip) return;
-    if (finalKm === '') {
-      toast('Informe a quilometragem final para encerrar a viagem', 'error');
-      return;
-    }
+    // Final KM is optional for closing a trip. If not provided, we keep it null.
 
     try {
       setSaving(true);
@@ -151,7 +207,7 @@ export default function TransportTrips() {
         end_date: endDate || new Date().toISOString().slice(0, 10),
         progress_type: progressType || '',
         initial_km: initialKm === '' ? null : Number(initialKm),
-        final_km: Number(finalKm),
+        final_km: finalKm === '' ? null : Number(finalKm),
         description,
         is_received: isReceived,
         status: 'completed',
@@ -262,45 +318,173 @@ export default function TransportTrips() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card p-4 border rounded lg:col-span-1">
-          <h2 className="text-base font-semibold mb-3">Em curso ({inProgressTrips.length})</h2>
-          <div className="space-y-2">
-            {inProgressTrips.length === 0 && <p className="text-sm text-gray-500">Nenhuma viagem em andamento.</p>}
-            {inProgressTrips.map((trip) => (
-              <button
-                key={trip.id}
-                type="button"
-                onClick={() => setSelectedTripId(String(trip.id))}
-                className={`w-full text-left p-3 rounded border ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
-              >
-                <div className="font-medium">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
-                <div className="text-xs text-gray-600">Data: {trip.date ? new Date(trip.date).toLocaleDateString('pt-BR') : '—'}</div>
-                <div className="text-xs text-gray-600">Início: {trip.start_date ? new Date(trip.start_date).toLocaleDateString('pt-BR') : '—'}</div>
-                <div className="text-xs text-gray-600">Total: {formatBRL(trip.total_value)}</div>
-              </button>
-            ))}
+        <div className="card p-4 border rounded lg:col-span-1 relative z-20">
+          {/* Filters panel above the lists */}
+          <div className="mb-4">
+              <div className="p-3 bg-white rounded shadow-sm">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 w-full">
+                      <div className="flex flex-col w-full sm:w-auto">
+                        <label className="text-xs text-gray-600">Data início</label>
+                        <input
+                          type="date"
+                          aria-label="Data início"
+                          className="input input-sm w-full sm:w-44"
+                          value={filterStartDate}
+                          onChange={(e) => setFilterStartDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="flex flex-col w-full sm:w-auto">
+                        <label className="text-xs text-gray-600">Data fim</label>
+                        <input
+                          type="date"
+                          aria-label="Data fim"
+                          className="input input-sm w-full sm:w-44"
+                          value={filterEndDate}
+                          onChange={(e) => setFilterEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="w-full sm:w-auto">
+                      <label className="sr-only">Veículo</label>
+                      <div className="flex items-center gap-2">
+                        <select
+                          aria-label="Selecionar veículo"
+                          className="input input-sm w-full sm:w-40"
+                          value={selectedVehicle}
+                          onChange={(e) => setSelectedVehicle(e.target.value)}
+                        >
+                          <option value="">Todos os veículos</option>
+                          {vehicles.map((v) => (
+                            <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          aria-label="Pesquisar"
+                          className="h-9 px-3 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
+                          onClick={async () => {
+                            try {
+                              setSearching(true);
+                              const params = {};
+                              if (selectedVehicle) params.vehicle = selectedVehicle;
+                              if (filterStartDate) params.start = filterStartDate;
+                              if (filterEndDate) params.end = filterEndDate;
+                              await loadTrips(params);
+                            } finally {
+                              setSearching(false);
+                            }
+                          }}
+                          disabled={searching}
+                        >
+                          {searching ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="animate-spin h-4 w-4 text-gray-600" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M12.9 14.32a8 8 0 111.414-1.414l4.387 4.387a1 1 0 01-1.414 1.414l-4.387-4.387zM8 14a6 6 0 100-12 6 6 0 000 12z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          aria-label="Limpar filtros"
+                          className="h-9 px-2 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
+                          onClick={async () => {
+                            setSelectedVehicle('');
+                            setFilterStartDate('');
+                            setFilterEndDate('');
+                            setSearchQuery('');
+                            await loadTrips();
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-2.293-9.707a1 1 0 011.414 0L10 8.586l.879-.879a1 1 0 111.414 1.414L11.414 10l.879.879a1 1 0 11-1.414 1.414L10 11.414l-.879.879a1 1 0 11-1.414-1.414L8.586 10l-.879-.879a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
           </div>
 
-          <h2 className="text-base font-semibold mt-5 mb-3">Encerradas ({completedTrips.length})</h2>
-          <div className="space-y-2 max-h-56 overflow-y-auto">
-            {completedTrips.length === 0 && <p className="text-sm text-gray-500">Nenhuma viagem encerrada.</p>}
-            {completedTrips.map((trip) => (
-              <button
-                key={trip.id}
-                type="button"
-                onClick={() => setSelectedTripId(String(trip.id))}
-                className={`w-full text-left p-3 rounded border ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
-              >
-                <div className="font-medium">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
-                <div className="text-xs text-gray-600">Data: {trip.date ? new Date(trip.date).toLocaleDateString('pt-BR') : '—'}</div>
-                <div className="text-xs text-gray-600">Fim: {trip.end_date ? new Date(trip.end_date).toLocaleDateString('pt-BR') : '—'}</div>
-                <div className="text-xs text-gray-600">Líquido: {formatBRL(trip.net_value)}</div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold">Em curso ({inProgressTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t)).length})</h2>
+            <button className="btn btn-sm" onClick={() => setShowInProgressExpanded((s) => !s)}>
+              {showInProgressExpanded ? 'Ocultar' : 'Expandir'}
+            </button>
+          </div>
+          {showInProgressExpanded && (
+            <div className="space-y-2">
+              {inProgressTrips.length === 0 && <p className="text-sm text-gray-500">Nenhuma viagem em andamento.</p>}
+              {inProgressTrips
+                .filter((trip) => tripInDateRange(trip) && tripMatchesSearch(trip))
+                .map((trip) => (
+                <button
+                  key={trip.id}
+                  type="button"
+                  onClick={() => setSelectedTripId(String(trip.id))}
+                  className={`w-full text-left p-2 rounded border flex items-center justify-between ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  <div>
+                    <div className="font-medium text-sm">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
+                    <div className="text-xs text-gray-600">{formatApiDate(trip.start_date || trip.date)}</div>
+                    <div className="text-xs text-gray-500 truncate" style={{ maxWidth: 240 }}>{trip.description || ''}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold">{formatBRL(trip.total_value)}</div>
+                    <div className="text-xs text-gray-500">{trip.driver_name || trip.vehicle_plate || ''}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">Encerradas ({completedTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t)).length})</h2>
+              <button className="btn btn-sm" onClick={() => setShowCompleted((s) => !s)}>
+                {showCompleted ? 'Ocultar' : 'Mostrar'} encerradas
               </button>
-            ))}
+            </div>
+            {showCompleted && (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {completedTrips.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhuma viagem encerrada.</p>
+                  ) : (
+                  completedTrips.filter((trip) => tripInDateRange(trip) && tripMatchesSearch(trip)).map((trip) => (
+                    <button
+                      key={trip.id}
+                      type="button"
+                      onClick={() => setSelectedTripId(String(trip.id))}
+                      className={`w-full text-left p-2 rounded border flex items-center justify-between ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      <div>
+                        <div className="font-medium text-sm">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
+                        <div className="text-xs text-gray-600">{formatApiDate(trip.end_date || trip.date)}</div>
+                        <div className="text-xs text-gray-500 truncate" style={{ maxWidth: 240 }}>{trip.description || ''}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-semibold">{formatBRL(trip.net_value)}</div>
+                        <div className="text-xs text-gray-500">{trip.driver_name || trip.vehicle_plate || ''}</div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="card p-4 border rounded lg:col-span-2">
+        <div className="card p-4 border rounded lg:col-span-2 relative z-10">
           {!selectedTrip ? (
             <p className="text-sm text-gray-500">Selecione uma viagem para gerenciar.</p>
           ) : (

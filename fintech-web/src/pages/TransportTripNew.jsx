@@ -4,7 +4,7 @@ import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import ConfirmModal from '../components/ConfirmModal';
-import { formatDecimalStringToBRL, normalizeInputDecimal } from '../utils/format';
+import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal, formatQuantityDisplay } from '../utils/format';
 import { multiplyDecimalStrings, addDecimalStrings, subtractDecimalStrings, divideDecimalStringByInt } from '../utils/decimal';
 import CurrencyInput from '../components/CurrencyInput';
 
@@ -68,19 +68,19 @@ export default function TransportTripNew() {
           setEndDate(trip.end_date || '');
           setProgressType(trip.progress_type || '');
           setModality(trip.modality || 'per_ton');
-          setTons(trip.tons != null ? String(trip.tons) : '');
-          setRatePerTon(trip.rate_per_ton != null ? String(trip.rate_per_ton) : '');
+          setTons(trip.tons != null ? formatQuantityDisplay(trip.tons) : '');
+          setRatePerTon(trip.rate_per_ton != null ? formatDecimalString(trip.rate_per_ton, 2) : '');
           setDays(trip.days != null ? String(trip.days) : '');
-          setDailyRate(trip.daily_rate != null ? String(trip.daily_rate) : '');
+          setDailyRate(trip.daily_rate != null ? formatDecimalString(trip.daily_rate, 2) : '');
           setDescription(trip.description || '');
           setIsReceived(Boolean(trip.is_received));
-          setBaseExpenseValue(trip.base_expense_value != null ? String(trip.base_expense_value) : '0');
-          setFuelExpenseValue(trip.fuel_expense_value != null ? String(trip.fuel_expense_value) : '0');
+          setBaseExpenseValue(trip.base_expense_value != null ? formatDecimalString(trip.base_expense_value, 2) : '0,00');
+          setFuelExpenseValue(trip.fuel_expense_value != null ? formatDecimalString(trip.fuel_expense_value, 2) : '0,00');
           setInitialKm(trip.initial_km != null ? String(trip.initial_km) : '');
           setFinalKm(trip.final_km != null ? String(trip.final_km) : '');
-          setDriverPayment(trip.driver_payment != null ? String(trip.driver_payment) : '0');
+          setDriverPayment(trip.driver_payment != null ? formatDecimalString(trip.driver_payment, 2) : '0,00');
           setDriverIsOwner(Boolean(trip.driver_is_owner));
-          setFuelLiters(trip.fuel_liters != null ? String(trip.fuel_liters) : '');
+          setFuelLiters(trip.fuel_liters != null ? formatQuantityDisplay(trip.fuel_liters) : '');
           setPreviewRaw(trip.total_value != null ? String(trip.total_value) : null);
           setPreview(Number(trip.total_value || 0));
         }
@@ -265,7 +265,7 @@ export default function TransportTripNew() {
               <label className="block text-sm font-medium">Valor por Tonelada</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={ratePerTon} onChange={e => setRatePerTon(e.target.rawValue)} />
+                <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={ratePerTon} onChange={e => setRatePerTon(e.target.value)} />
               </div>
             </div>
           </div>
@@ -281,7 +281,7 @@ export default function TransportTripNew() {
               <label className="block text-sm font-medium">Valor Diário</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-                <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={dailyRate} onChange={e => setDailyRate(e.target.rawValue)} />
+                <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={dailyRate} onChange={e => setDailyRate(e.target.value)} />
               </div>
             </div>
           </div>
@@ -317,7 +317,7 @@ export default function TransportTripNew() {
             <label className="block text-sm font-medium">Outros gastos da Viagem</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={baseExpenseValue} onChange={e => setBaseExpenseValue(e.target.rawValue)} />
+              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={baseExpenseValue} onChange={e => setBaseExpenseValue(e.target.value)} />
             </div>
           </div>
           <div>
@@ -351,7 +351,7 @@ export default function TransportTripNew() {
             <label className="block text-sm font-medium">Gasto de Combustível</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={fuelExpenseValue} onChange={e => setFuelExpenseValue(e.target.rawValue)} />
+              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={fuelExpenseValue} onChange={e => setFuelExpenseValue(e.target.value)} />
             </div>
           </div>
         </div>
@@ -381,7 +381,7 @@ export default function TransportTripNew() {
             <label className="block text-sm font-medium">Pagamento do Motorista (manual)</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={driverPayment} onChange={e => setDriverPayment(e.target.rawValue)} />
+              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={driverPayment} onChange={e => setDriverPayment(e.target.value)} />
             </div>
             <div className="mt-2">
               <label className="flex items-center gap-2 text-sm">

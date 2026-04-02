@@ -61,3 +61,14 @@ export function normalizeInputDecimal(value) {
   if (value === null || value === undefined) return '';
   return String(value).replace(/\./g, '').replace(/,/g, '.');
 }
+
+export function formatQuantityDisplay(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const s = String(value).trim();
+  let n = Number(s);
+  if (Number.isNaN(n)) n = Number(s.replace(',', '.'));
+  if (Number.isNaN(n)) n = Number(s.replace(/\./g, '').replace(',', '.'));
+  if (Number.isNaN(n)) return s;
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(3).replace(/\.?0+$/, '');
+}
