@@ -24,6 +24,7 @@ import ModuleSettings from './pages/ModuleSettings';
 import AccountManagement from './pages/AccountManagement';
 import AdminUserManagement from './pages/AdminUserManagement';
 import ChangePassword from './pages/ChangePassword';
+import Reports from './pages/Reports';
  
 
 export default function App() {
@@ -113,6 +114,14 @@ export default function App() {
               <SuperUserRoute>
                 <AdminUserManagement />
               </SuperUserRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <Reports />
             </ProtectedRoute>
           }
         />

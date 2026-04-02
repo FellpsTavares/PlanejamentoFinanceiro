@@ -13,8 +13,16 @@ const downloadPdf = async (url, filename, params = {}) => {
   window.URL.revokeObjectURL(objectUrl);
 };
 
+const fetchPdfBlob = async (url, params = {}) => {
+  const response = await api.get(url, { responseType: 'blob', params });
+  return response.data;
+};
+
 export const reportsService = {
   downloadFinancePdf: async (params = {}) => downloadPdf('/reports/finance-pdf/', 'relatorio_financeiro.pdf', params),
   downloadTransportPdf: async (params = {}) => downloadPdf('/reports/transport-pdf/', 'relatorio_transportadora.pdf', params),
   downloadInvestmentsPdf: async (params = {}) => downloadPdf('/reports/investments-pdf/', 'relatorio_investimentos.pdf', params),
+  fetchFinancePdf: async (params = {}) => fetchPdfBlob('/reports/finance-pdf/', params),
+  fetchTransportPdf: async (params = {}) => fetchPdfBlob('/reports/transport-pdf/', params),
+  fetchInvestmentsPdf: async (params = {}) => fetchPdfBlob('/reports/investments-pdf/', params),
 };
