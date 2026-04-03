@@ -59,7 +59,13 @@ export function formatDecimalString(value, decimals = 2) {
 
 export function normalizeInputDecimal(value) {
   if (value === null || value === undefined) return '';
-  return String(value).replace(/\./g, '').replace(/,/g, '.');
+  const s = String(value).trim();
+  // Se contém vírgula, é formato BR: pontos são separadores de milhar → remover; vírgula = decimal → converter
+  if (s.includes(',')) {
+    return s.replace(/\./g, '').replace(/,/g, '.');
+  }
+  // Sem vírgula: já está no formato ponto-decimal (resultado de cálculo interno) ou inteiro simples
+  return s;
 }
 
 export function formatQuantityDisplay(value) {
