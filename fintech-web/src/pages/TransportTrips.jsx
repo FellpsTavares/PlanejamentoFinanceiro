@@ -80,7 +80,10 @@ export default function TransportTrips() {
   const loadTrips = async (params = {}) => {
     setLoading(true);
     try {
-      const data = await transportService.getTrips(params);
+      // garantir que, por padrão nesta UI, solicitemos a lista completa (no_page=1)
+      const _params = { ...(params || {}) };
+      if (!('no_page' in _params)) _params.no_page = '1';
+      const data = await transportService.getTrips(_params);
       const items = data?.results || data || [];
       setTrips(items);
       const tripFromQuery = searchParams.get('trip');
