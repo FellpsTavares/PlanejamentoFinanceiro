@@ -1,8 +1,8 @@
 import api from './api';
 
 export const transportService = {
-  getVehicles: async () => {
-    const res = await api.get('/transport/vehicles/');
+  getVehicles: async (params = {}) => {
+    const res = await api.get('/transport/vehicles/', { params });
     return res.data;
   },
   createVehicle: async (payload) => {
@@ -37,15 +37,18 @@ export const transportService = {
     const res = await api.patch(`/transport/expenses/${id}/`, payload);
     return res.data;
   },
-  getRevenues: async (vehicleId) => {
-    const params = {};
-    if (vehicleId) params.vehicle = vehicleId;
+  getRevenues: async (vehicleIdOrParams = {}) => {
+    // aceita signature (vehicleId) ou (params)
+    let params = {};
+    if (vehicleIdOrParams && typeof vehicleIdOrParams === 'object') params = vehicleIdOrParams;
+    else if (vehicleIdOrParams) params = { vehicle: vehicleIdOrParams };
     const res = await api.get('/transport/revenues/', { params });
     return res.data;
   },
-  getExpenses: async (vehicleId) => {
-    const params = {};
-    if (vehicleId) params.vehicle = vehicleId;
+  getExpenses: async (vehicleIdOrParams = {}) => {
+    let params = {};
+    if (vehicleIdOrParams && typeof vehicleIdOrParams === 'object') params = vehicleIdOrParams;
+    else if (vehicleIdOrParams) params = { vehicle: vehicleIdOrParams };
     const res = await api.get('/transport/expenses/', { params });
     return res.data;
   },
