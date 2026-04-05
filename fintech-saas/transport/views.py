@@ -320,6 +320,18 @@ class TripViewSet(viewsets.ModelViewSet):
             return Trip.objects.filter(vehicle__tenant=tenant).order_by('-date', '-id')
         return Trip.objects.none()
 
+    def list(self, request, *args, **kwargs):
+        """
+        Suporte para retornar todas as viagens sem paginação via query param `no_page=1`.
+        Isso permite que a UI solicite a lista completa quando necessário (ex: Gerenciar Viagens).
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        no_page = str(request.query_params.get('no_page') or '').lower() in ('1', 'true', 'yes')
+        if no_page:
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+        return super().list(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         # validar veículo pertence ao tenant
         vehicle = serializer.validated_data.get('vehicle')
