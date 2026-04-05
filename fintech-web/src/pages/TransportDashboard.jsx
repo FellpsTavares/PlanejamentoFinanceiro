@@ -17,11 +17,13 @@ export default function TransportDashboard() {
     const load = async () => {
       setLoading(true);
       try {
+        // solicitar dados completos (no_page=1) para o painel, assim os totais
+        // refletem todas as viagens/lançamentos e não apenas a primeira página
         const [vehiclesData, tripsData, revenuesData, expensesData] = await Promise.all([
-          transportService.getVehicles(),
-          transportService.getTrips(),
-          transportService.getRevenues(),
-          transportService.getExpenses(),
+          transportService.getVehicles({ no_page: '1' }),
+          transportService.getTrips({ no_page: '1' }),
+          transportService.getRevenues({ no_page: '1' }),
+          transportService.getExpenses({ no_page: '1' }),
         ]);
 
         const vehicles = vehiclesData.results || vehiclesData || [];
@@ -29,8 +31,12 @@ export default function TransportDashboard() {
         const revenues = revenuesData.results || revenuesData || [];
         const expenses = expensesData.results || expensesData || [];
 
-        setVehiclesCount(vehicles.length);
-        setTripsCount(trips.length);
+        // Preferir usar `count` quando a resposta estiver paginada; caso contrário usar length
+        const vehiclesCountReal = typeof vehiclesData?.count === 'number' ? vehiclesData.count : vehicles.length;
+        const tripsCountReal = typeof tripsData?.count === 'number' ? tripsData.count : trips.length;
+
+        setVehiclesCount(vehiclesCountReal);
+        setTripsCount(tripsCountReal);
         setRecentTrips(trips.slice(0, 5));
 
         const revTotalManual = revenues.reduce((acc, item) => acc + Number(item.amount || 0), 0);
