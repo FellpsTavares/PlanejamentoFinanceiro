@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import LoadingOverlay from '../components/LoadingOverlay';
 import api from '../services/api';
 import { investmentsMarketService } from '../services/investmentsMarket';
 
@@ -105,7 +106,7 @@ export default function InvestmentsDashboard() {
     };
   }, [investments]);
 
-  if (loading) return <div className="p-6">Carregando painel de investimentos...</div>;
+  if (loading) return <LoadingOverlay message="Carregando painel de investimentos..." />;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
 
   return (

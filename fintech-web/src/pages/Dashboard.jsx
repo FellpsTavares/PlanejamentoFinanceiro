@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { transactionService } from '../services/transactions';
@@ -45,14 +46,7 @@ export default function Dashboard() {
   }, [navigate]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="spinner mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    );
+    return <LoadingOverlay message="Carregando painel..." />;
   }
 
   return (

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import ConfirmModal from '../components/ConfirmModal';
@@ -230,7 +231,7 @@ export default function TransportTripNew() {
     }
   };
 
-  if (loading) return <div className="p-6">Carregando...</div>;
+  if (loading) return <LoadingOverlay message="Carregando formulário de viagem..." />;
 
   return (
     <div className="p-6 max-w-4xl">
