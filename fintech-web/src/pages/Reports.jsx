@@ -27,10 +27,11 @@ const REPORT_CONFIGS = {
       { key: 'vehicle', label: 'Veículo' },
       { key: 'start_date', label: 'Início' },
       { key: 'end_date', label: 'Fim' },
-      { key: 'status', label: 'Status' },
+      	{ key: 'status', label: 'Status' },
       { key: 'total_value', label: 'Valor Bruto' },
       { key: 'expense_value', label: 'Total Despesas' },
       { key: 'net_value', label: 'Líquido' },
+      { key: 'description', label: 'Descrição' },
     ],
     orderBy: [
       { key: 'start_date', label: 'Data de início' },

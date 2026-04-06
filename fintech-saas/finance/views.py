@@ -689,6 +689,7 @@ class ReportViewSet(viewsets.ViewSet):
             'expense_value': ('Despesa', lambda t: f"R$ {float(t.expense_value or 0):.2f}"),
             'net_value': ('Líquido', lambda t: f"R$ {float((t.total_value or 0) - (t.expense_value or 0)):.2f}"),
             'is_received': ('Recebida', lambda t: 'Sim' if t.is_received else 'Não'),
+            'description': ('Descrição', lambda t: t.description or ''),
         }
         selected_fields = [f for f in fields_param.split(',') if f in field_specs] if fields_param else []
         if not selected_fields:
