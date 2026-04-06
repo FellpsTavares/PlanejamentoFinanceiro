@@ -55,7 +55,7 @@ export default function TransportVehicleProfile() {
   const [placements, setPlacements] = useState([]);
   const [maintenanceLogs, setMaintenanceLogs] = useState([]);
 
-  const [activeAccordion, setActiveAccordion] = useState({ tires: false, maintenance: false });
+  const [activeAccordion, setActiveAccordion] = useState({ tires: false, maintenance: false, edit: false });
 
   const [tireForm, setTireForm] = useState({
     brand: '',
@@ -339,7 +339,7 @@ export default function TransportVehicleProfile() {
         <div className="mt-2">Receitas: {summary ? formatBRL(summary.revenues_total) : '—'}</div>
         <div>Despesas: {summary ? formatBRL(summary.expenses_total) : '—'}</div>
         <div className="mt-3">
-          <button className="btn btn-sm btn-secondary" onClick={() => { setTripModalInitial(null); setTripModalOpen(true); }}>Nova Viagem</button>
+          {/* Removido botão de criar/visualizar viagens no perfil do veículo */}
         </div>
       </div>
 
@@ -387,73 +387,82 @@ export default function TransportVehicleProfile() {
         </div>
       </div>
 
-      <div className="mt-6 p-4 border rounded bg-gray-50">
-        <h2 className="font-semibold mb-3">Editar veículo</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs text-gray-600">Modelo</label>
-            <input className="input" value={vehicleForm.model} onChange={(e) => setVehicleForm((p) => ({ ...p, model: e.target.value }))} />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600">Ano</label>
-            <input className="input" type="number" value={vehicleForm.year} onChange={(e) => setVehicleForm((p) => ({ ...p, year: e.target.value }))} />
-          </div>
-          <div>
-            <label className="text-xs text-gray-600">Capacidade</label>
-            <input className="input" value={vehicleForm.capacity} onChange={(e) => setVehicleForm((p) => ({ ...p, capacity: e.target.value }))} />
-          </div>
+      <div className="mt-6">
+        <div className="border rounded">
+          <button className="w-full text-left px-4 py-3 font-semibold bg-gray-50" onClick={() => setActiveAccordion((p) => ({ ...p, edit: !p.edit }))}>
+            Editar veículo
+          </button>
+          {activeAccordion.edit && (
+            <div className="p-4 border-t bg-gray-50">
+              <h2 className="font-semibold mb-3">Editar veículo</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-gray-600">Modelo</label>
+                  <input className="input" value={vehicleForm.model} onChange={(e) => setVehicleForm((p) => ({ ...p, model: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Ano</label>
+                  <input className="input" type="number" value={vehicleForm.year} onChange={(e) => setVehicleForm((p) => ({ ...p, year: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Capacidade</label>
+                  <input className="input" value={vehicleForm.capacity} onChange={(e) => setVehicleForm((p) => ({ ...p, capacity: e.target.value }))} />
+                </div>
 
-          <label className="flex items-center gap-2 md:col-span-3 text-sm font-medium text-gray-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={Boolean(vehicleForm.is_dual_wheel)}
-              onChange={(e) => setVehicleForm((p) => ({ ...p, is_dual_wheel: e.target.checked }))}
-            />
-            Rodagem dupla (4 pneus por eixo)
-          </label>
+                <label className="flex items-center gap-2 md:col-span-3 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={Boolean(vehicleForm.is_dual_wheel)}
+                    onChange={(e) => setVehicleForm((p) => ({ ...p, is_dual_wheel: e.target.checked }))}
+                  />
+                  Rodagem dupla (4 pneus por eixo)
+                </label>
 
-          <div>
-            <label className="text-xs text-gray-600">KM inicial do veículo</label>
-            <input
-              className="input"
-              type="number"
+                <div>
+                  <label className="text-xs text-gray-600">KM inicial do veículo</label>
+                  <input
+                    className="input"
+                    type="number"
               min="0"
               value={vehicleForm.initial_km}
               onChange={(e) => setVehicleForm((p) => ({ ...p, initial_km: sanitizeIntegerInput(e.target.value, { min: 0, max: 999999999, allowEmpty: true }) }))}
             />
           </div>
 
-          <div>
-            <label className="text-xs text-gray-600">Número de eixos (máx. {MAX_AXLES_ALLOWED})</label>
-            <input
-              className="input"
-              type="number"
-              min="1"
-              max={MAX_AXLES_ALLOWED}
-              value={vehicleForm.number_of_axles}
-              onChange={(e) => setVehicleForm((p) => ({ ...p, number_of_axles: sanitizeIntegerInput(e.target.value, { min: 1, max: MAX_AXLES_ALLOWED, allowEmpty: true }) }))}
-            />
-          </div>
+                <div>
+                  <label className="text-xs text-gray-600">Número de eixos (máx. {MAX_AXLES_ALLOWED})</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max={MAX_AXLES_ALLOWED}
+                    value={vehicleForm.number_of_axles}
+                    onChange={(e) => setVehicleForm((p) => ({ ...p, number_of_axles: sanitizeIntegerInput(e.target.value, { min: 1, max: MAX_AXLES_ALLOWED, allowEmpty: true }) }))}
+                  />
+                </div>
 
-          <div>
-            <label className="text-xs text-gray-600">Data da próxima revisão</label>
-            <input className="input" type="date" value={vehicleForm.next_review_date} onChange={(e) => setVehicleForm((p) => ({ ...p, next_review_date: e.target.value }))} />
-          </div>
+                <div>
+                  <label className="text-xs text-gray-600">Data da próxima revisão</label>
+                  <input className="input" type="date" value={vehicleForm.next_review_date} onChange={(e) => setVehicleForm((p) => ({ ...p, next_review_date: e.target.value }))} />
+                </div>
 
-          <div>
-            <label className="text-xs text-gray-600">KM previsto para próxima revisão</label>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              value={vehicleForm.next_review_km}
-              onChange={(e) => setVehicleForm((p) => ({ ...p, next_review_km: sanitizeIntegerInput(e.target.value, { min: 0, max: 999999999, allowEmpty: true }) }))}
-            />
-          </div>
-        </div>
-        <div className="mt-3">
-          <button className="btn btn-primary" onClick={handleSaveVehicle}>Salvar dados do veículo</button>
+                <div>
+                  <label className="text-xs text-gray-600">KM previsto para próxima revisão</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    value={vehicleForm.next_review_km}
+                    onChange={(e) => setVehicleForm((p) => ({ ...p, next_review_km: sanitizeIntegerInput(e.target.value, { min: 0, max: 999999999, allowEmpty: true }) }))}
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <button className="btn btn-primary" onClick={handleSaveVehicle}>Salvar dados do veículo</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -637,38 +646,7 @@ export default function TransportVehicleProfile() {
         </div>
       </div>
 
-      <details className="mt-6 border rounded bg-white" open={false}>
-        <summary className="cursor-pointer px-4 py-3 font-semibold">Viagens (expandir para visualizar)</summary>
-        <div className="p-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold">Viagens</h3>
-            <button className="btn btn-sm btn-secondary" onClick={() => { setTripModalInitial(null); setTripModalOpen(true); }}>Adicionar Viagem</button>
-          </div>
-          <ul className="mt-3 space-y-2">
-            {trips.length === 0 && <li className="text-sm text-gray-500">Nenhuma viagem registrada.</li>}
-            {trips.map((t) => (
-              <li key={t.id} className="p-3 border rounded flex justify-between items-center">
-                <div>
-                  <div className="font-semibold">{t.date ? new Date(t.date).toLocaleDateString('pt-BR') : ''} — {formatBRL(t.total_value)}</div>
-                  <div className="text-sm text-gray-600">
-                    {t.modality === 'per_ton'
-                      ? `Por tonelada${t.tons ? ` • ${formatNumber(t.tons, 0, 3)} t` : ''}${t.rate_per_ton ? ` • ${formatBRL(t.rate_per_ton)}/t` : ''}`
-                      : `Arrendamento${t.days ? ` • ${formatNumber(t.days, 0, 0)} dias` : ''}${t.daily_rate ? ` • ${formatBRL(t.daily_rate)}/dia` : ''}`}
-                  </div>
-                  <div className="text-sm text-gray-600">{t.is_received ? 'Recebida' : 'Não recebida'} • Gastos: {formatBRL(t.expense_value)}</div>
-                  <div className="text-sm text-gray-600">Outros: {formatBRL(t.base_expense_value)} • Combustível: {formatBRL(t.fuel_expense_value)} • Motorista: {formatBRL(t.driver_payment)}</div>
-                  <div className="text-sm text-gray-600">KM inicial: {t.initial_km ?? '—'} • KM final: {t.final_km ?? '—'}</div>
-                  {t.description && <div className="text-sm text-gray-500">{t.description}</div>}
-                </div>
-                <div className="flex items-center gap-3">
-                  <button className="text-blue-600" onClick={() => { setTripModalInitial(t); setTripModalOpen(true); }}>Editar</button>
-                  <button className="text-red-600" onClick={() => { setConfirmPayload({ kind: 'trip', id: t.id }); setConfirmOpen(true); }}>Excluir</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </details>
+      {/* Seção de Viagens removida conforme solicitado */}
 
       <TransportEntryExpenseModal
         open={modalOpen}
