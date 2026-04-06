@@ -117,6 +117,22 @@ export default function Home() {
   ];
 
   const visibleModules = modules.filter((m) => m.enabled);
+  // Garantir que os flags de módulo sejam booleanos estritos (evita 'false' string sendo truthy)
+  const normalizeModuleFlags = (userObj) => {
+    const tenant = userObj?.tenant || {};
+    return {
+      has_module_transport: tenant.has_module_transport === true || tenant.has_module_transport === 'true',
+      has_module_investments: tenant.has_module_investments === true || tenant.has_module_investments === 'true',
+    };
+  };
+
+  // Se houver discrepância no armazenamento/local token, recomputar enabled dinamicamente
+  const moduleFlags = normalizeModuleFlags(user);
+  const visibleModulesChecked = modules.filter((m) => {
+    if (m.key === 'transport') return moduleFlags.has_module_transport;
+    if (m.key === 'investments') return moduleFlags.has_module_investments;
+    return m.enabled;
+  });
 
   return (
     <div className="p-8">
@@ -126,14 +142,14 @@ export default function Home() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {visibleModules.map((module) => (
+        {visibleModulesChecked.map((module) => (
           <div key={module.key} className="bg-white rounded-2xl p-6 shadow-sm hover:shadow-lg transition">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{module.title}</h2>
                 <p className="text-sm text-gray-600 mt-1">{module.description}</p>
               </div>
-              <div className="text-sm text-gray-400">{module.key.toUpperCase()}</div>
+              {/* Badge de chave do módulo removido por solicitação */}
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -145,11 +161,10 @@ export default function Home() {
             </div>
 
             {['initial', 'transport', 'investments'].includes(module.key) && (
-              <div className="mt-6 flex items-center justify-between">
+              <div className="mt-6">
                 <Link to={`/reports?module=${module.key}`} className="btn btn-primary">
                   Ir para Relatórios
                 </Link>
-                <div className="text-sm text-gray-500">Variáveis disponíveis: {REPORT_CONFIGS[module.key].fields.length}</div>
               </div>
             )}
           </div>
