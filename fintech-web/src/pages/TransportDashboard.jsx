@@ -69,6 +69,7 @@ export default function TransportDashboard() {
       <div className="mt-4 flex gap-2">
         <Link to="/transport/vehicles" className="btn btn-secondary">Ver Veículos</Link>
         <Link to="/transport/trips" className="btn btn-secondary">Gerenciar Viagens</Link>
+        <Link to="/transport/reports" className="btn btn-secondary">Relatórios</Link>
         <Link to="/transport/trips/new" className="btn btn-primary">Nova Viagem</Link>
       </div>
 

@@ -11,6 +11,7 @@ from .views import (
     OilChangeLogViewSet,
     MaintenanceAlertViewSet,
 )
+from .report_views import TransportReportView
 
 router = DefaultRouter()
 router.register(r'vehicles', VehicleViewSet, basename='vehicle')
@@ -25,4 +26,7 @@ router.register(r'maintenance-alerts', MaintenanceAlertViewSet, basename='mainte
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('reports/', TransportReportView.as_view(), name='transport-reports'),
+    # Rota dedicada para download PDF (evita problemas com proxies/headers)
+    path('reports/pdf/', TransportReportView.as_view(), name='transport-reports-pdf'),
 ]
