@@ -10,10 +10,12 @@ from .views import (
     MaintenanceLogViewSet,
     OilChangeLogViewSet,
     MaintenanceAlertViewSet,
+    DriverViewSet,
 )
 from .report_views import TransportReportView
 
 router = DefaultRouter()
+router.register(r'drivers', DriverViewSet, basename='driver')
 router.register(r'vehicles', VehicleViewSet, basename='vehicle')
 router.register(r'revenues', TransportRevenueViewSet, basename='transportrevenue')
 router.register(r'expenses', TransportExpenseViewSet, basename='transportexpense')

@@ -5,6 +5,29 @@ from django.db.models import Sum, F, IntegerField, ExpressionWrapper
 from django.utils.translation import gettext_lazy as _
 
 
+class Driver(models.Model):
+    tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='drivers')
+    name = models.CharField(max_length=255, verbose_name=_('Nome'))
+    start_date = models.DateField(verbose_name=_('Data de início'))
+    end_date = models.DateField(null=True, blank=True, verbose_name=_('Data de saída'))
+    age = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name=_('Idade'))
+    is_owner = models.BooleanField(default=False, verbose_name=_('É o dono'))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _('Motorista')
+        verbose_name_plural = _('Motoristas')
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f"{self.name} ({'Ativo' if self.is_active else 'Inativo'})"
+
+    @property
+    def is_active(self):
+        return self.end_date is None or self.end_date >= date.today()
+
+
 class Vehicle(models.Model):
     tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='vehicles')
     plate = models.CharField(max_length=20, verbose_name=_('Placa'))
@@ -16,6 +39,12 @@ class Vehicle(models.Model):
     number_of_axles = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Número de eixos'))
     next_review_date = models.DateField(null=True, blank=True, verbose_name=_('Próxima revisão (data)'))
     next_review_km = models.PositiveIntegerField(null=True, blank=True, verbose_name=_('Próxima revisão (km)'))
+    drivers = models.ManyToManyField(
+        'Driver',
+        blank=True,
+        related_name='vehicles',
+        verbose_name=_('Motoristas vinculados'),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -146,6 +175,13 @@ class Trip(models.Model):
     consumption_km_per_liter = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     # indicar se o motorista é o próprio dono (nenhum pagamento ao motorista)
     driver_is_owner = models.BooleanField(default=False)
+    driver = models.ForeignKey(
+        'Driver',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='trips',
+        verbose_name=_('Motorista da viagem'),
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='in_progress')
     driver_payment = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)

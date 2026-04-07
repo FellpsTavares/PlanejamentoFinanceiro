@@ -24,6 +24,7 @@ const COLUMNS = {
   ],
   trips: [
     { key: 'plate', label: 'Placa' },
+    { key: 'driver_name', label: 'Motorista' },
     { key: 'start_date', label: 'Início' },
     { key: 'end_date', label: 'Fim' },
     { key: 'modality_label', label: 'Modalidade' },
@@ -36,6 +37,7 @@ const COLUMNS = {
   ],
   driver_payments: [
     { key: 'plate', label: 'Placa' },
+    { key: 'driver_name', label: 'Motorista' },
     { key: 'start_date', label: 'Início' },
     { key: 'end_date', label: 'Fim' },
     { key: 'status_label', label: 'Status' },
