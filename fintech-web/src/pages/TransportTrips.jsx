@@ -30,6 +30,7 @@ export default function TransportTrips() {
   const [finalKm, setFinalKm] = useState('');
   const [description, setDescription] = useState('');
   const [isReceived, setIsReceived] = useState(false);
+  const [filterReceived, setFilterReceived] = useState('all'); // 'all' | 'received' | 'not_received'
   const [filterText, setFilterText] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -70,7 +71,11 @@ export default function TransportTrips() {
   const tripMatchesSearch = (trip) => {
     // if a vehicle is explicitly selected, match exact plate
     if (selectedVehicle && String(selectedVehicle).trim()) {
-      return String(trip.vehicle_plate || '').trim() === String(selectedVehicle).trim();
+      // selectedVehicle may be an id or a plate string depending on the UI; compare against known fields
+      const sel = String(selectedVehicle).trim();
+      const vehicleId = String(trip.vehicle_id || trip.vehicle || '').trim();
+      const plate = String(trip.vehicle_plate || '').trim();
+      return vehicleId === sel || plate === sel;
     }
     if (!searchQuery || !String(searchQuery).trim()) return true;
     const q = String(searchQuery).toLowerCase().trim();
@@ -146,6 +151,24 @@ export default function TransportTrips() {
     loadTransportSettings();
     loadVehicles();
   }, [searchParams]);
+
+  // auto-run search when selected vehicle or received filter changes
+  useEffect(() => {
+    (async () => {
+      try {
+        setSearching(true);
+        const params = {};
+        if (selectedVehicle) params.vehicle = selectedVehicle;
+        if (filterStartDate) params.start = filterStartDate;
+        if (filterEndDate) params.end = filterEndDate;
+        if (filterReceived && filterReceived !== 'all') params.is_received = filterReceived === 'received' ? '1' : '0';
+        await loadTrips(params);
+      } finally {
+        setSearching(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicle, filterReceived]);
 
   const selectedTrip = useMemo(() => {
     return trips.find((trip) => String(trip.id) === String(selectedTripId));
@@ -367,6 +390,16 @@ export default function TransportTrips() {
                             <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
                           ))}
                         </select>
+                        <select
+                          aria-label="Filtrar por recebido"
+                          className="input input-sm w-full sm:w-36"
+                          value={filterReceived}
+                          onChange={(e) => setFilterReceived(e.target.value)}
+                        >
+                          <option value="all">Todos</option>
+                          <option value="received">Recebidas</option>
+                          <option value="not_received">Não recebidas</option>
+                        </select>
                         <button
                           type="button"
                           aria-label="Pesquisar"
@@ -378,6 +411,7 @@ export default function TransportTrips() {
                               if (selectedVehicle) params.vehicle = selectedVehicle;
                               if (filterStartDate) params.start = filterStartDate;
                               if (filterEndDate) params.end = filterEndDate;
+                              if (filterReceived && filterReceived !== 'all') params.is_received = filterReceived === 'received' ? '1' : '0';
                               await loadTrips(params);
                             } finally {
                               setSearching(false);
@@ -406,6 +440,7 @@ export default function TransportTrips() {
                             setFilterStartDate('');
                             setFilterEndDate('');
                             setSearchQuery('');
+                            setFilterReceived('all');
                             await loadTrips();
                           }}
                         >

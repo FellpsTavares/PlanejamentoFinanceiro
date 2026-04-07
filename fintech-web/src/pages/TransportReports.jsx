@@ -184,6 +184,16 @@ export default function TransportReports() {
     }
   };
 
+  // Se o usuário selecionar um veículo enquanto estiver no tipo 'trips',
+  // executamos a busca automaticamente para exibir as viagens sem exigir
+  // um clique adicional no botão "Pesquisar".
+  useEffect(() => {
+    if (reportType === 'trips' && filters.vehicle_id) {
+      handleSearch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.vehicle_id, reportType]);
+
   const handleExportCsv = async () => {
     if (!searched || rows.length === 0) {
       toast('Pesquise primeiro para exportar.', 'warning');
