@@ -60,11 +60,24 @@ export function formatDecimalString(value, decimals = 2) {
 export function normalizeInputDecimal(value) {
   if (value === null || value === undefined) return '';
   const s = String(value).trim();
-  // Se contém vírgula, é formato BR: pontos são separadores de milhar → remover; vírgula = decimal → converter
+  // Formato BR com vírgula decimal: pontos são separadores de milhar → remover; vírgula → ponto
   if (s.includes(',')) {
     return s.replace(/\./g, '').replace(/,/g, '.');
   }
-  // Sem vírgula: já está no formato ponto-decimal (resultado de cálculo interno) ou inteiro simples
+  // Sem vírgula mas com ponto: pode ser separador de milhar BR (ex: "1.000") ou decimal EN (ex: "1.5")
+  // Heurística: se o último segmento após ponto tem exatamente 3 dígitos e todos os segmentos são numéricos,
+  // é separador de milhar BR (Cleave.js formata assim).
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    const allDigits = parts.every((p) => /^\d+$/.test(p));
+    const lastHasThree = parts[parts.length - 1].length === 3;
+    if (allDigits && lastHasThree) {
+      // Ex: "1.000" → "1000", "1.000.000" → "1000000"
+      return parts.join('');
+    }
+    // Caso contrário: ponto como decimal (formato interno/EN), ex: "1.5", "1000.00"
+    return s;
+  }
   return s;
 }
 

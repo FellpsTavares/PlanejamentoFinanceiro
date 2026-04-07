@@ -159,7 +159,8 @@ export default function TransportTripNew() {
     : grossTotalStr;
   const pctMul = multiplyDecimalStrings(calcBaseStr, pct);
   const pctDriverStr = divideDecimalStringByInt(pctMul, 100);
-  const driverPaymentPreviewStr = driverReceiveType === '1' ? manualDriverStr : pctDriverStr;
+  // Proprietário não gera pagamento de motorista
+  const driverPaymentPreviewStr = driverIsOwner ? '0' : (driverReceiveType === '1' ? manualDriverStr : pctDriverStr);
   const totalExpensePreviewStr = addDecimalStrings(addDecimalStrings(baseExpenseStr, fuelExpenseStr), driverPaymentPreviewStr);
   const netPreviewStr = subtractDecimalStrings(grossTotalStr, totalExpensePreviewStr);
 
@@ -186,7 +187,9 @@ export default function TransportTripNew() {
       initial_km: initialKm === '' ? null : Number(initialKm),
       final_km: finalKm === '' ? null : Number(finalKm),
     };
-    if (driverReceiveType === '1') {
+    if (driverIsOwner) {
+      payload.driver_payment = 0;
+    } else if (driverReceiveType === '1') {
       payload.driver_payment = parseMoney(driverPayment || 0);
     }
     if (modality === 'per_ton') {
