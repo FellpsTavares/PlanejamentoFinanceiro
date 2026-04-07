@@ -44,7 +44,15 @@ export default function TransportTripNew() {
   const [preview, setPreview] = useState(null);
   const [previewRaw, setPreviewRaw] = useState(null);
 
-  const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
+  const parseMoney = (value) => {
+    if (value === null || value === undefined) return 0;
+    let s = String(value).trim();
+    if (!s) return 0;
+    // remover separador de milhares (pontos) e normalizar vírgula para ponto
+    s = s.replace(/\./g, '').replace(/,/g, '.');
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   useEffect(() => {
     const load = async () => {
