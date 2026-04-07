@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 
@@ -307,7 +308,7 @@ export default function TransportTrips() {
   };
 
   if (loading) {
-    return <div className="p-6">Carregando viagens...</div>;
+    return <LoadingOverlay message="Carregando viagens..." />;
   }
 
   return (

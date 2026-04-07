@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { useParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import api from '../services/api';
@@ -312,7 +313,7 @@ export default function TransportVehicleProfile() {
     }
   };
 
-  if (loading) return <div className="p-6">Carregando...</div>;
+  if (loading) return <LoadingOverlay message="Carregando veículo..." />;
   if (error) return <div className="p-6 text-red-600">Erro: {typeof error === 'string' ? error : JSON.stringify(error)}</div>;
 
   return (
