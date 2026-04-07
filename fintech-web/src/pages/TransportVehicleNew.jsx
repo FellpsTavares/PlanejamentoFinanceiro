@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { transportService } from '../services/transport';
 import { useNavigate } from 'react-router-dom';
 
@@ -88,6 +88,7 @@ export default function TransportVehicleNew() {
           <input value={nextReviewDate} onChange={(e)=>setNextReviewDate(e.target.value)} className="input" type="date" />
         </div>
         <input value={nextReviewKm} onChange={(e)=>setNextReviewKm(sanitizeIntegerInput(e.target.value, { min: 0, max: 999999999, allowEmpty: true }))} placeholder="KM previsto para próxima revisão" className="input" type="number" min="0" />
+        <p className="text-xs text-gray-500">Os motoristas podem ser vinculados na página de perfil do veículo após o cadastro.</p>
         <div className="flex items-center gap-2">
           <button type="submit" className="btn btn-primary" disabled={loading}>{loading ? 'Salvando...' : 'Salvar'}</button>
           {error && <div className="text-red-600 text-sm">{error}</div>}

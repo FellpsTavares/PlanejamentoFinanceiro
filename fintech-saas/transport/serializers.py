@@ -1,8 +1,17 @@
 from rest_framework import serializers
 from decimal import Decimal
 from .models import Vehicle, FuelLog, TransportRevenue, TransportExpense
-from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert
+from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
 from accounts.models import TenantParameter
+
+
+class DriverSerializer(serializers.ModelSerializer):
+    is_active = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Driver
+        fields = ['id', 'tenant', 'name', 'start_date', 'end_date', 'age', 'is_owner', 'is_active', 'created_at']
+        read_only_fields = ['tenant', 'is_active', 'created_at']
 
 
 class FuelLogSerializer(serializers.ModelSerializer):
@@ -26,15 +35,38 @@ class TransportExpenseSerializer(serializers.ModelSerializer):
 class VehicleSerializer(serializers.ModelSerializer):
     avg_consumption = serializers.SerializerMethodField(read_only=True)
     current_km = serializers.IntegerField(read_only=True)
+    drivers = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Driver.objects.all(),
+        required=False,
+    )
+    driver_names = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Vehicle
         fields = [
             'id', 'tenant', 'plate', 'model', 'year', 'capacity',
             'initial_km', 'is_dual_wheel', 'number_of_axles', 'next_review_date', 'next_review_km',
+            'drivers', 'driver_names',
             'avg_consumption', 'current_km'
         ]
-        read_only_fields = ['avg_consumption', 'current_km', 'tenant']
+        read_only_fields = ['avg_consumption', 'current_km', 'tenant', 'driver_names']
+
+    def get_driver_names(self, obj):
+        return [{'id': d.id, 'name': d.name, 'is_owner': d.is_owner, 'is_active': d.is_active} for d in obj.drivers.all()]
+
+    def create(self, validated_data):
+        drivers = validated_data.pop('drivers', [])
+        vehicle = super().create(validated_data)
+        vehicle.drivers.set(drivers)
+        return vehicle
+
+    def update(self, instance, validated_data):
+        drivers = validated_data.pop('drivers', None)
+        vehicle = super().update(instance, validated_data)
+        if drivers is not None:
+            vehicle.drivers.set(drivers)
+        return vehicle
 
     def get_avg_consumption(self, obj):
         # Busca os dois últimos registros de FuelLog do veículo
@@ -56,6 +88,7 @@ class VehicleSerializer(serializers.ModelSerializer):
 
 class TripSerializer(serializers.ModelSerializer):
     net_value = serializers.SerializerMethodField(read_only=True)
+    driver_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Trip
@@ -65,9 +98,15 @@ class TripSerializer(serializers.ModelSerializer):
             'base_expense_value', 'fuel_expense_value', 'initial_km', 'final_km',
             # novo: litros abastecidos e consumo calculado
             'fuel_liters', 'consumption_km_per_liter', 'driver_is_owner',
+            'driver', 'driver_name',
             'status', 'driver_payment', 'expense_value', 'net_value', 'description'
         ]
-        read_only_fields = ['total_value', 'consumption_km_per_liter']
+        read_only_fields = ['total_value', 'consumption_km_per_liter', 'driver_name']
+
+    def get_driver_name(self, obj):
+        if obj.driver_id:
+            return obj.driver.name
+        return None
 
     def get_net_value(self, obj):
         # Incluir receitas adicionais do tipo 'trip' vinculadas ao veículo no período da viagem
@@ -217,6 +256,11 @@ class TripSerializer(serializers.ModelSerializer):
 
         # se motorista é dono, zera pagamento ao motorista
         driver_is_owner = bool(validated_data.get('driver_is_owner', getattr(instance, 'driver_is_owner', False)))
+        # sincronizar driver_is_owner se o motorista vinculado for dono
+        driver_obj = validated_data.get('driver', getattr(instance, 'driver', None))
+        if driver_obj is not None and getattr(driver_obj, 'is_owner', False):
+            driver_is_owner = True
+            validated_data['driver_is_owner'] = True
         if driver_is_owner:
             driver_payment = Decimal('0')
 

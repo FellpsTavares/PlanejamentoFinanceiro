@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import models
 from django.db.models import Sum
 from django.db import transaction
 from django.utils.dateparse import parse_date
@@ -9,7 +10,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 from .models import Vehicle, TransportRevenue, TransportExpense
-from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert
+from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
 from .serializers import (
     VehicleSerializer,
     TransportRevenueSerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     MaintenanceLogSerializer,
     OilChangeLogSerializer,
     MaintenanceAlertSerializer,
+    DriverSerializer,
 )
 from .permissions import HasTransportModule
 
@@ -461,3 +463,27 @@ class MaintenanceAlertViewSet(viewsets.ReadOnlyModelViewSet):
             alert.is_read = True
             alert.save(update_fields=['is_read'])
         return Response(self.get_serializer(alert).data)
+
+
+class DriverViewSet(viewsets.ModelViewSet):
+    queryset = Driver.objects.all()
+    serializer_class = DriverSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+
+    def get_queryset(self):
+        from datetime import date as _date
+        tenant = getattr(self.request.user, 'tenant', None)
+        if not tenant:
+            return Driver.objects.none()
+        qs = Driver.objects.filter(tenant=tenant)
+        active_param = self.request.query_params.get('active')
+        if active_param is not None and str(active_param).lower() in ('1', 'true', 'yes'):
+            today = _date.today()
+            qs = qs.filter(
+                models.Q(end_date__isnull=True) | models.Q(end_date__gte=today)
+            )
+        return qs
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)

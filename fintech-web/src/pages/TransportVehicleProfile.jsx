@@ -45,6 +45,9 @@ export default function TransportVehicleProfile() {
     next_review_date: '',
     next_review_km: '',
   });
+  const [linkedDrivers, setLinkedDrivers] = useState([]); // [{id, name, is_owner, is_active}]
+  const [allDrivers, setAllDrivers] = useState([]);       // todos os motoristas do tenant
+  const [driverToAdd, setDriverToAdd] = useState('');
 
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +130,7 @@ export default function TransportVehicleProfile() {
     const res = await api.get(`/transport/vehicles/${id}/`);
     const data = res.data;
     setVehicle(data);
+    setLinkedDrivers(data.driver_names || []);
     setVehicleForm({
       model: data.model || '',
       capacity: data.capacity || '',
@@ -161,14 +165,16 @@ export default function TransportVehicleProfile() {
       setError(null);
       try {
         await refreshVehicle();
-        const [s, rev, exp] = await Promise.all([
+        const [s, rev, exp, driversData] = await Promise.all([
           transportService.getVehicleSummary(id),
           transportService.getRevenues(id),
           transportService.getExpenses(id),
+          transportService.getDrivers({ no_page: 1 }),
         ]);
         setSummary(s);
         setRevenues(rev.results || rev);
         setExpenses(exp.results || exp);
+        setAllDrivers(Array.isArray(driversData) ? driversData : (driversData.results || []));
         await Promise.all([refreshTrips(), refreshTransportAssets()]);
       } catch (err) {
         console.error('Erro carregando veículo', err);
@@ -179,6 +185,34 @@ export default function TransportVehicleProfile() {
     };
     load();
   }, [id]);
+
+  const handleAddDriver = async () => {
+    if (!driverToAdd) return;
+    const currentIds = linkedDrivers.map((d) => d.id);
+    if (currentIds.includes(Number(driverToAdd))) return;
+    const newIds = [...currentIds, Number(driverToAdd)];
+    try {
+      await transportService.updateVehicle(id, { drivers: newIds });
+      await refreshVehicle();
+      setDriverToAdd('');
+      toast('Motorista vinculado', 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao vincular motorista', 'error');
+    }
+  };
+
+  const handleRemoveDriver = async (driverId) => {
+    const newIds = linkedDrivers.map((d) => d.id).filter((i) => i !== driverId);
+    try {
+      await transportService.updateVehicle(id, { drivers: newIds });
+      await refreshVehicle();
+      toast('Motorista removido', 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao remover motorista', 'error');
+    }
+  };
 
   const handleSaveVehicle = async () => {
     try {
@@ -461,6 +495,76 @@ export default function TransportVehicleProfile() {
               </div>
               <div className="mt-3">
                 <button className="btn btn-primary" onClick={handleSaveVehicle}>Salvar dados do veículo</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Motoristas vinculados */}
+      <div className="mt-4">
+        <div className="border rounded">
+          <button
+            className="w-full text-left px-4 py-3 font-semibold bg-gray-50"
+            onClick={() => setActiveAccordion((p) => ({ ...p, drivers: !p.drivers }))}
+          >
+            Motoristas vinculados ({linkedDrivers.length})
+          </button>
+          {activeAccordion.drivers && (
+            <div className="p-4 border-t bg-gray-50 space-y-4">
+              {linkedDrivers.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum motorista vinculado a este veículo.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-600 border-b">
+                      <th className="pb-1">Nome</th>
+                      <th className="pb-1">Tipo</th>
+                      <th className="pb-1">Status</th>
+                      <th className="pb-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedDrivers.map((d) => (
+                      <tr key={d.id} className="border-b last:border-0">
+                        <td className="py-1">{d.name}</td>
+                        <td className="py-1">{d.is_owner ? 'Proprietário' : 'Motorista'}</td>
+                        <td className="py-1">
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${d.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {d.is_active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td className="py-1 text-right">
+                          <button
+                            className="text-red-500 hover:underline text-xs"
+                            onClick={() => handleRemoveDriver(d.id)}
+                          >
+                            Remover
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="flex gap-2 items-center pt-2">
+                <select
+                  className="input flex-1"
+                  value={driverToAdd}
+                  onChange={(e) => setDriverToAdd(e.target.value)}
+                >
+                  <option value="">Selecionar motorista para vincular...</option>
+                  {allDrivers
+                    .filter((d) => !linkedDrivers.find((l) => l.id === d.id))
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}{d.is_owner ? ' (Proprietário)' : ''}
+                      </option>
+                    ))}
+                </select>
+                <button className="btn btn-primary" onClick={handleAddDriver} disabled={!driverToAdd}>
+                  Vincular
+                </button>
               </div>
             </div>
           )}

@@ -14,6 +14,8 @@ export default function TransportTripNew() {
   const [searchParams] = useSearchParams();
   const tripId = searchParams.get('trip');
   const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [driverId, setDriverId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -51,6 +53,9 @@ export default function TransportTripNew() {
         const v = await transportService.getVehicles();
         setVehicles(v.results || v);
 
+        const drv = await transportService.getDrivers({ no_page: 1 });
+        setDrivers(drv.results || drv || []);
+
         const params = await tenantParametersService.getByModule('transport');
         const map = Object.fromEntries((params || []).map((p) => [p.key, p.value]));
         setDriverReceiveType(String(map.TIPO_RECEBIMENTO_MOTORISTA || '1'));
@@ -81,6 +86,7 @@ export default function TransportTripNew() {
           setFinalKm(trip.final_km != null ? String(trip.final_km) : '');
           setDriverPayment(trip.driver_payment != null ? formatDecimalString(trip.driver_payment, 2) : '0,00');
           setDriverIsOwner(Boolean(trip.driver_is_owner));
+          setDriverId(trip.driver != null ? String(trip.driver) : '');
           setFuelLiters(trip.fuel_liters != null ? formatQuantityDisplay(trip.fuel_liters) : '');
           setPreviewRaw(trip.total_value != null ? String(trip.total_value) : null);
           setPreview(Number(trip.total_value || 0));
@@ -101,6 +107,24 @@ export default function TransportTripNew() {
       setVehicleId(vehicleFromQuery);
     }
   }, [searchParams]);
+
+  // Auto-fill motorista ao selecionar veículo (somente nova viagem)
+  // Preenche automaticamente apenas quando o veículo tiver exatamente 1 motorista vinculado
+  useEffect(() => {
+    if (!vehicleId || tripId) return;
+    const vehicle = vehicles.find((v) => String(v.id) === String(vehicleId));
+    if (!vehicle) return;
+    const vehicleDrivers = vehicle.driver_names || [];
+    if (vehicleDrivers.length === 1) {
+      const linked = vehicleDrivers[0];
+      setDriverId(String(linked.id));
+      setDriverIsOwner(Boolean(linked.is_owner));
+    } else {
+      // mais de um motorista vinculado — deixa o usuário escolher
+      setDriverId('');
+      setDriverIsOwner(false);
+    }
+  }, [vehicleId, vehicles, drivers, tripId]);
 
   const calculate = () => {
     try {
@@ -135,7 +159,8 @@ export default function TransportTripNew() {
     : grossTotalStr;
   const pctMul = multiplyDecimalStrings(calcBaseStr, pct);
   const pctDriverStr = divideDecimalStringByInt(pctMul, 100);
-  const driverPaymentPreviewStr = driverReceiveType === '1' ? manualDriverStr : pctDriverStr;
+  // Proprietário não gera pagamento de motorista
+  const driverPaymentPreviewStr = driverIsOwner ? '0' : (driverReceiveType === '1' ? manualDriverStr : pctDriverStr);
   const totalExpensePreviewStr = addDecimalStrings(addDecimalStrings(baseExpenseStr, fuelExpenseStr), driverPaymentPreviewStr);
   const netPreviewStr = subtractDecimalStrings(grossTotalStr, totalExpensePreviewStr);
 
@@ -158,10 +183,13 @@ export default function TransportTripNew() {
       fuel_expense_value: parseMoney(fuelExpenseValue || 0),
       fuel_liters: fuelLiters ? normalizeInputDecimal(fuelLiters) : null,
       driver_is_owner: driverIsOwner,
+      driver: driverId ? parseInt(driverId, 10) : null,
       initial_km: initialKm === '' ? null : Number(initialKm),
       final_km: finalKm === '' ? null : Number(finalKm),
     };
-    if (driverReceiveType === '1') {
+    if (driverIsOwner) {
+      payload.driver_payment = 0;
+    } else if (driverReceiveType === '1') {
       payload.driver_payment = parseMoney(driverPayment || 0);
     }
     if (modality === 'per_ton') {
@@ -246,6 +274,27 @@ export default function TransportTripNew() {
               <option key={v.id} value={v.id}>{v.plate} — {v.model}</option>
             ))}
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium">Motorista</label>
+          <select value={driverId} onChange={(e) => {
+            setDriverId(e.target.value);
+            const driverObj = drivers.find((d) => String(d.id) === e.target.value);
+            if (driverObj) setDriverIsOwner(Boolean(driverObj.is_owner));
+            else if (!e.target.value) setDriverIsOwner(false);
+          }} className="input-field w-full">
+            <option value="">Nenhum</option>
+            {drivers.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.name}{d.is_owner ? ' (dono)' : ''}{!d.is_active ? ' — Inativo' : ''}
+              </option>
+            ))}
+          </select>
+          {driverId && drivers.find((d) => String(d.id) === driverId)?.is_owner && (
+            <p className="mt-1 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">
+              Motorista é o proprietário — nenhum pagamento de motorista será gerado.
+            </p>
+          )}
         </div>
 
         <div>

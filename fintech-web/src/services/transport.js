@@ -140,4 +140,21 @@ export const transportService = {
     const res = await api.delete(`/transport/expenses/${id}/`);
     return res.data;
   },
+
+  // Motoristas
+  getDrivers: async (params = {}) => {
+    const res = await api.get('/transport/drivers/', { params });
+    return res.data;
+  },
+  createDriver: async (payload) => {
+    const res = await api.post('/transport/drivers/', payload);
+    return res.data;
+  },
+  updateDriver: async (id, payload) => {
+    const res = await api.patch(`/transport/drivers/${id}/`, payload);
+    return res.data;
+  },
+  deleteDriver: async (id) => {
+    await api.delete(`/transport/drivers/${id}/`);
+  },
 };

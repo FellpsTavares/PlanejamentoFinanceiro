@@ -21,6 +21,7 @@ import TransportVehicleNew from './pages/TransportVehicleNew';
 import TransportTripNew from './pages/TransportTripNew';
 import TransportTrips from './pages/TransportTrips';
 import TransportReports from './pages/TransportReports';
+import TransportDrivers from './pages/TransportDrivers';
 import ModuleSettings from './pages/ModuleSettings';
 import AccountManagement from './pages/AccountManagement';
 import AdminUserManagement from './pages/AdminUserManagement';
@@ -201,6 +202,16 @@ export default function App() {
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
                 <TransportReports />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/drivers"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportDrivers />
               </ModuleRoute>
             </ProtectedRoute>
           }

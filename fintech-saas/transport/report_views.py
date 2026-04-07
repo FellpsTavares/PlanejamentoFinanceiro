@@ -41,6 +41,7 @@ _PDF_COLUMNS = {
     ],
     'trips': [
         ('plate', 'Placa'),
+        ('driver_name', 'Motorista'),
         ('start_date', 'Início'),
         ('end_date', 'Fim'),
         ('modality_label', 'Modalidade'),
@@ -53,6 +54,7 @@ _PDF_COLUMNS = {
     ],
     'driver_payments': [
         ('plate', 'Placa'),
+        ('driver_name', 'Motorista'),
         ('start_date', 'Início'),
         ('end_date', 'Fim'),
         ('status_label', 'Status'),
@@ -383,7 +385,7 @@ class TransportReportView(APIView):
 
         qs = Trip.objects.filter(
             vehicle__tenant=tenant
-        ).select_related('vehicle')
+        ).select_related('vehicle', 'driver')
 
         if start:
             qs = qs.filter(Q(start_date__gte=start) | Q(date__gte=start))
@@ -420,6 +422,7 @@ class TransportReportView(APIView):
                 'vehicle': str(t.vehicle),
                 'vehicle_id': t.vehicle_id,
                 'plate': t.vehicle.plate,
+                'driver_name': t.driver.name if t.driver_id else '—',
                 'date': str(t.date) if t.date else None,
                 'start_date': str(t.start_date) if t.start_date else None,
                 'end_date': str(t.end_date) if t.end_date else None,
@@ -474,7 +477,7 @@ class TransportReportView(APIView):
         qs = Trip.objects.filter(
             vehicle__tenant=tenant,
             driver_is_owner=False,
-        ).select_related('vehicle')
+        ).select_related('vehicle', 'driver')
 
         if start:
             qs = qs.filter(Q(start_date__gte=start) | Q(date__gte=start))
@@ -495,6 +498,7 @@ class TransportReportView(APIView):
                 'id': t.id,
                 'vehicle': str(t.vehicle),
                 'plate': t.vehicle.plate,
+                'driver_name': t.driver.name if t.driver_id else '—',
                 'start_date': str(t.start_date) if t.start_date else None,
                 'end_date': str(t.end_date) if t.end_date else None,
                 'status': t.status,

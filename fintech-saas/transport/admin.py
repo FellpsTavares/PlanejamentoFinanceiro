@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Vehicle, TransportRevenue, TransportExpense, FuelLog
+from .models import Vehicle, TransportRevenue, TransportExpense, FuelLog, Driver
+
+
+@admin.register(Driver)
+class DriverAdmin(admin.ModelAdmin):
+    list_display = ('name', 'start_date', 'end_date', 'is_owner', 'tenant')
+    list_filter = ('is_owner', 'tenant')
+    search_fields = ('name',)
 
 
 @admin.register(Vehicle)
