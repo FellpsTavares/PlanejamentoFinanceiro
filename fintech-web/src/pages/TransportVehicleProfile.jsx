@@ -36,6 +36,7 @@ export default function TransportVehicleProfile() {
 
   const [vehicle, setVehicle] = useState(null);
   const [vehicleForm, setVehicleForm] = useState({
+    plate: '',
     model: '',
     capacity: '',
     year: '',
@@ -132,6 +133,7 @@ export default function TransportVehicleProfile() {
     setVehicle(data);
     setLinkedDrivers(data.driver_names || []);
     setVehicleForm({
+      plate: data.plate || '',
       model: data.model || '',
       capacity: data.capacity || '',
       year: data.year || '',
@@ -217,6 +219,7 @@ export default function TransportVehicleProfile() {
   const handleSaveVehicle = async () => {
     try {
       await transportService.updateVehicle(id, {
+        plate: (vehicleForm.plate || '').trim(),
         model: vehicleForm.model,
         capacity: vehicleForm.capacity,
         year: Number(vehicleForm.year),
@@ -431,6 +434,10 @@ export default function TransportVehicleProfile() {
             <div className="p-4 border-t bg-gray-50">
               <h2 className="font-semibold mb-3">Editar veículo</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-gray-600">Placa</label>
+                  <input className="input" value={vehicleForm.plate} onChange={(e) => setVehicleForm((p) => ({ ...p, plate: e.target.value.toUpperCase() }))} />
+                </div>
                 <div>
                   <label className="text-xs text-gray-600">Modelo</label>
                   <input className="input" value={vehicleForm.model} onChange={(e) => setVehicleForm((p) => ({ ...p, model: e.target.value }))} />
