@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 export default function TransportDashboard() {
   const [loading, setLoading] = useState(true);
@@ -57,7 +58,7 @@ export default function TransportDashboard() {
     load();
   }, []);
 
-  if (loading) return <div className="p-6">Carregando painel...</div>;
+  if (loading) return <LoadingOverlay message="Carregando painel..." />;
 
   const netProfit = revenuesTotal - expensesTotal;
 
