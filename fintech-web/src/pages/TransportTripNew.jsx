@@ -426,10 +426,19 @@ export default function TransportTripNew() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input type="checkbox" checked={isReceived} onChange={(e) => setIsReceived(e.target.checked)} />
-              Valor da viagem já recebido
+          <div className="flex items-center pb-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={isReceived}
+                  onChange={(e) => setIsReceived(e.target.checked)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-checked:bg-blue-600 rounded-full transition-colors"></div>
+                <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+              </div>
+              <span className="text-sm font-medium text-gray-700">Valor da viagem já recebido</span>
             </label>
           </div>
         </div>
