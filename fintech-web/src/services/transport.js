@@ -157,4 +157,79 @@ export const transportService = {
   deleteDriver: async (id) => {
     await api.delete(`/transport/drivers/${id}/`);
   },
+
+  // ── Manutenção de Frota ──────────────────────────────────────
+
+  getMaintenanceDashboard: async () => {
+    const res = await api.get('/transport/maintenance/dashboard/');
+    return res.data;
+  },
+
+  // Preventiva
+  getPreventivePlans: async (params = {}) => {
+    const res = await api.get('/transport/preventive-plans/', { params });
+    return res.data;
+  },
+  createPreventivePlan: async (payload) => {
+    const res = await api.post('/transport/preventive-plans/', payload);
+    return res.data;
+  },
+  updatePreventivePlan: async (id, payload) => {
+    const res = await api.patch(`/transport/preventive-plans/${id}/`, payload);
+    return res.data;
+  },
+  deletePreventivePlan: async (id) => {
+    await api.delete(`/transport/preventive-plans/${id}/`);
+  },
+
+  // Preditiva
+  getPredictiveReadings: async (params = {}) => {
+    const res = await api.get('/transport/predictive-readings/', { params });
+    return res.data;
+  },
+  createPredictiveReading: async (payload) => {
+    const res = await api.post('/transport/predictive-readings/', payload);
+    return res.data;
+  },
+  updatePredictiveReading: async (id, payload) => {
+    const res = await api.patch(`/transport/predictive-readings/${id}/`, payload);
+    return res.data;
+  },
+  deletePredictiveReading: async (id) => {
+    await api.delete(`/transport/predictive-readings/${id}/`);
+  },
+
+  // Corretiva
+  getCorrectiveMaintenances: async (params = {}) => {
+    const res = await api.get('/transport/corrective-maintenances/', { params });
+    return res.data;
+  },
+  createCorrectiveMaintenance: async (payload) => {
+    const res = await api.post('/transport/corrective-maintenances/', payload);
+    return res.data;
+  },
+  updateCorrectiveMaintenance: async (id, payload) => {
+    const res = await api.patch(`/transport/corrective-maintenances/${id}/`, payload);
+    return res.data;
+  },
+  deleteCorrectiveMaintenance: async (id) => {
+    await api.delete(`/transport/corrective-maintenances/${id}/`);
+  },
+
+  // Checklist de Segurança
+  getSafetyChecklists: async (params = {}) => {
+    const res = await api.get('/transport/safety-checklists/', { params });
+    return res.data;
+  },
+  createSafetyChecklist: async (payload) => {
+    const res = await api.post('/transport/safety-checklists/', payload);
+    return res.data;
+  },
+  updateSafetyChecklist: async (id, payload) => {
+    const res = await api.patch(`/transport/safety-checklists/${id}/`, payload);
+    return res.data;
+  },
+  deleteSafetyChecklist: async (id) => {
+    await api.delete(`/transport/safety-checklists/${id}/`);
+  },
 };
