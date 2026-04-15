@@ -2,7 +2,51 @@ from rest_framework import serializers
 from decimal import Decimal
 from .models import Vehicle, FuelLog, TransportRevenue, TransportExpense
 from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
+from .models import PreventivePlan, PredictiveReading, CorrectiveMaintenance, SafetyChecklist
 from accounts.models import TenantParameter
+
+
+# Aceita valores date ou datetime para representação sem falhar
+class DateOrDateTimeField(serializers.DateField):
+    def to_representation(self, value):
+        try:
+            import datetime as _dt
+            if isinstance(value, _dt.datetime):
+                value = value.date()
+        except Exception:
+            pass
+        return super().to_representation(value)
+
+
+# Usa DateTimeField internamente, mas representa apenas a parte date (YYYY-MM-DD)
+class DateTimeAsDateField(serializers.DateTimeField):
+    def to_representation(self, value):
+        try:
+            # se for datetime, converte para date
+            import datetime as _dt
+            if isinstance(value, _dt.datetime):
+                value = value.date()
+        except Exception:
+            pass
+        # delega para DateField representation (string YYYY-MM-DD)
+        return serializers.DateField().to_representation(value)
+
+    def to_internal_value(self, data):
+        # aceita 'dd/mm/yyyy' e 'yyyy-mm-dd' e também datetimes
+        if isinstance(data, str) and '/' in data:
+            # dd/mm/yyyy -> yyyy-mm-dd
+            parts = data.split('/')
+            if len(parts) == 3:
+                data = f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+        val = super().to_internal_value(data)
+        # val may be datetime => convert to date
+        try:
+            import datetime as _dt
+            if isinstance(val, _dt.datetime):
+                return val.date()
+        except Exception:
+            pass
+        return val
 
 
 class DriverSerializer(serializers.ModelSerializer):
@@ -426,3 +470,88 @@ class MaintenanceAlertSerializer(serializers.ModelSerializer):
             'title', 'message', 'is_read', 'alert_date', 'created_at'
         ]
         read_only_fields = ['id', 'tenant', 'created_at']
+
+
+class PreventivePlanSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+    component_type_display = serializers.CharField(source='get_component_type_display', read_only=True)
+    intervention_type_display = serializers.CharField(source='get_intervention_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = PreventivePlan
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model',
+            'component_type', 'component_type_display',
+            'intervention_type', 'intervention_type_display',
+            'trigger', 'trigger_km_interval', 'trigger_date_interval',
+            'last_done_km', 'last_done_date',
+            'next_due_km', 'next_due_date',
+            'status', 'status_display', 'notes',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at',
+                            'vehicle_plate', 'vehicle_model',
+                            'component_type_display', 'intervention_type_display', 'status_display']
+
+
+class PredictiveReadingSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+    component_type_display = serializers.CharField(source='get_component_type_display', read_only=True)
+    alert_level_display = serializers.CharField(source='get_alert_level_display', read_only=True)
+    read_at = DateTimeAsDateField()
+
+    class Meta:
+        model = PredictiveReading
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model',
+            'component_type', 'component_type_display',
+            'metric_name', 'value', 'unit',
+            'read_at', 'alert_level', 'alert_level_display',
+            'notes', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at',
+                            'vehicle_plate', 'vehicle_model',
+                            'component_type_display', 'alert_level_display']
+
+
+class CorrectiveMaintenanceSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+    type_display = serializers.CharField(source='get_type_display', read_only=True)
+    downtime_hours = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = CorrectiveMaintenance
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model',
+            'type', 'type_display',
+            'description', 'occurred_at', 'repaired_at',
+            'repair_cost', 'supplier', 'notes',
+            'downtime_hours', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at',
+                            'vehicle_plate', 'vehicle_model', 'type_display', 'downtime_hours']
+
+
+class SafetyChecklistSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+    checklist_type_display = serializers.CharField(source='get_checklist_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = SafetyChecklist
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model',
+            'checklist_type', 'checklist_type_display',
+            'checked_at', 'next_due_date',
+            'status', 'status_display',
+            'notes', 'checked_by',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at',
+                            'vehicle_plate', 'vehicle_model',
+                            'checklist_type_display', 'status_display']

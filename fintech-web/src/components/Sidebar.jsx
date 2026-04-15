@@ -47,7 +47,7 @@ export default function Sidebar() {
           { to: '/transport/trips', label: 'Gerenciar Viagens' },
           { to: '/transport/vehicles', label: 'Veículos' },
           { to: '/transport/drivers', label: 'Motoristas' },
-          { to: '/transport/trips/new', label: 'Nova Viagem' },
+          { to: '/transport/maintenance', label: 'Manutenção' },
         ],
       });
     }

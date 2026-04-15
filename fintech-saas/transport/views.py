@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Sum, Avg, Count, Q
 from django.db import transaction
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from .models import Vehicle, TransportRevenue, TransportExpense
 from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
+from .models import PreventivePlan, PredictiveReading, CorrectiveMaintenance, SafetyChecklist
 from .serializers import (
     VehicleSerializer,
     TransportRevenueSerializer,
@@ -23,6 +24,10 @@ from .serializers import (
     OilChangeLogSerializer,
     MaintenanceAlertSerializer,
     DriverSerializer,
+    PreventivePlanSerializer,
+    PredictiveReadingSerializer,
+    CorrectiveMaintenanceSerializer,
+    SafetyChecklistSerializer,
 )
 from .permissions import HasTransportModule
 
@@ -487,3 +492,214 @@ class DriverViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         tenant = getattr(self.request.user, 'tenant', None)
         serializer.save(tenant=tenant)
+
+
+# ──────────────────────────────────────────────────────────────
+# Seção de Manutenção de Frota
+# ──────────────────────────────────────────────────────────────
+
+class PreventivePlanViewSet(viewsets.ModelViewSet):
+    queryset = PreventivePlan.objects.all()
+    serializer_class = PreventivePlanSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'component_type', 'status']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return PreventivePlan.objects.filter(tenant=tenant).select_related('vehicle')
+        return PreventivePlan.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+class PredictiveReadingViewSet(viewsets.ModelViewSet):
+    queryset = PredictiveReading.objects.all()
+    serializer_class = PredictiveReadingSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'component_type', 'alert_level']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return PredictiveReading.objects.filter(tenant=tenant).select_related('vehicle')
+        return PredictiveReading.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+class CorrectiveMaintenanceViewSet(viewsets.ModelViewSet):
+    queryset = CorrectiveMaintenance.objects.all()
+    serializer_class = CorrectiveMaintenanceSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'type']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return CorrectiveMaintenance.objects.filter(tenant=tenant).select_related('vehicle')
+        return CorrectiveMaintenance.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+class SafetyChecklistViewSet(viewsets.ModelViewSet):
+    queryset = SafetyChecklist.objects.all()
+    serializer_class = SafetyChecklistSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'checklist_type', 'status']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return SafetyChecklist.objects.filter(tenant=tenant).select_related('vehicle')
+        return SafetyChecklist.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+from rest_framework.views import APIView
+from datetime import date as _date, timedelta
+
+
+class MaintenanceDashboardView(APIView):
+    """Endpoint de KPIs agregados para o dashboard de manutenção."""
+
+    permission_classes = [IsAuthenticated, HasTransportModule]
+
+    def get(self, request):
+        tenant = getattr(request.user, 'tenant', None)
+        if not tenant:
+            return Response({})
+
+        today = _date.today()
+        month_start = today.replace(day=1)
+
+        # ── 1. Conformidade do Plano Preventivo (últimos 30 dias) ──
+        thirty_days_ago = today - timedelta(days=30)
+        plans_total = PreventivePlan.objects.filter(
+            tenant=tenant,
+            next_due_date__gte=thirty_days_ago,
+            next_due_date__lte=today,
+        ).count()
+        plans_done = PreventivePlan.objects.filter(
+            tenant=tenant,
+            next_due_date__gte=thirty_days_ago,
+            next_due_date__lte=today,
+            status=PreventivePlan.STATUS_DONE,
+        ).count()
+        plan_compliance = round((plans_done / plans_total * 100), 1) if plans_total else 100.0
+
+        # ── 2. Alertas preditivos ativos ──
+        active_alerts = PredictiveReading.objects.filter(
+            tenant=tenant,
+            alert_level__in=[PredictiveReading.ALERT_WARNING, PredictiveReading.ALERT_CRITICAL],
+        ).count()
+
+        # ── 3. MTTR médio do mês (horas) ──
+        correctives_month = CorrectiveMaintenance.objects.filter(
+            tenant=tenant,
+            occurred_at__date__gte=month_start,
+            repaired_at__isnull=False,
+        )
+        downtime_total = 0.0
+        corr_count = 0
+        for c in correctives_month:
+            dh = c.downtime_hours
+            if dh is not None:
+                downtime_total += dh
+                corr_count += 1
+        avg_mttr = round(downtime_total / corr_count, 2) if corr_count else 0.0
+
+        # ── 4. Custo não planejado do mês ──
+        unplanned_cost = CorrectiveMaintenance.objects.filter(
+            tenant=tenant,
+            occurred_at__date__gte=month_start,
+        ).aggregate(total=Sum('repair_cost'))['total'] or 0
+        unplanned_cost = float(unplanned_cost)
+
+        # ── 5. Checklists em dia (% de veículos) ──
+        total_vehicles = Vehicle.objects.filter(tenant=tenant).count()
+        vehicles_with_expired = SafetyChecklist.objects.filter(
+            tenant=tenant,
+            status=SafetyChecklist.STATUS_EXPIRED,
+        ).values('vehicle').distinct().count()
+        checklist_ok_pct = (
+            round(((total_vehicles - vehicles_with_expired) / total_vehicles * 100), 1)
+            if total_vehicles else 100.0
+        )
+
+        # ── Alertas de urgência (lista combinada) ──
+        urgent_alerts = []
+
+        # Preditivos críticos
+        for pr in PredictiveReading.objects.filter(
+            tenant=tenant,
+            alert_level=PredictiveReading.ALERT_CRITICAL,
+        ).select_related('vehicle').order_by('-read_at')[:10]:
+            urgent_alerts.append({
+                'type': 'predictive_critical',
+                'vehicle_plate': pr.vehicle.plate,
+                'description': f"{pr.get_component_type_display()} – {pr.metric_name}: {pr.value} {pr.unit}",
+                'date': str(pr.read_at),
+                'priority': 1,
+            })
+
+        # Preventivas vencidas
+        for pp in PreventivePlan.objects.filter(
+            tenant=tenant,
+            status=PreventivePlan.STATUS_OVERDUE,
+        ).select_related('vehicle').order_by('next_due_date')[:10]:
+            urgent_alerts.append({
+                'type': 'preventive_overdue',
+                'vehicle_plate': pp.vehicle.plate,
+                'description': f"{pp.get_intervention_type_display()} – venceu em {pp.next_due_date or 'N/A'}",
+                'date': str(pp.next_due_date) if pp.next_due_date else None,
+                'priority': 2,
+            })
+
+        # Checklists vencidos
+        for sc in SafetyChecklist.objects.filter(
+            tenant=tenant,
+            status=SafetyChecklist.STATUS_EXPIRED,
+        ).select_related('vehicle').order_by('next_due_date')[:10]:
+            urgent_alerts.append({
+                'type': 'checklist_expired',
+                'vehicle_plate': sc.vehicle.plate,
+                'description': f"{sc.get_checklist_type_display()} – venceu em {sc.next_due_date}",
+                'date': str(sc.next_due_date),
+                'priority': 3,
+            })
+
+        # Corretivas paliativas recentes
+        for cm in CorrectiveMaintenance.objects.filter(
+            tenant=tenant,
+            type=CorrectiveMaintenance.TYPE_PALLIATIVE,
+            occurred_at__date__gte=today - timedelta(days=7),
+        ).select_related('vehicle').order_by('-occurred_at')[:5]:
+            urgent_alerts.append({
+                'type': 'corrective_palliative',
+                'vehicle_plate': cm.vehicle.plate,
+                'description': cm.description[:120],
+                'date': str(cm.occurred_at.date()),
+                'priority': 4,
+            })
+
+        urgent_alerts.sort(key=lambda x: x['priority'])
+
+        return Response({
+            'plan_compliance': plan_compliance,
+            'active_alerts': active_alerts,
+            'avg_mttr_hours': avg_mttr,
+            'unplanned_cost': unplanned_cost,
+            'checklist_ok_pct': checklist_ok_pct,
+            'urgent_alerts': urgent_alerts,
+        })

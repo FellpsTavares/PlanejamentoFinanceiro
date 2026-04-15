@@ -22,6 +22,11 @@ import TransportTripNew from './pages/TransportTripNew';
 import TransportTrips from './pages/TransportTrips';
 import TransportReports from './pages/TransportReports';
 import TransportDrivers from './pages/TransportDrivers';
+import TransportMaintenance from './pages/TransportMaintenance';
+import TransportMaintenancePreventive from './pages/TransportMaintenancePreventive';
+import TransportMaintenancePredictive from './pages/TransportMaintenancePredictive';
+import TransportMaintenanceCorrective from './pages/TransportMaintenanceCorrective';
+import TransportMaintenanceChecklist from './pages/TransportMaintenanceChecklist';
 import ModuleSettings from './pages/ModuleSettings';
 import AccountManagement from './pages/AccountManagement';
 import AdminUserManagement from './pages/AdminUserManagement';
@@ -212,6 +217,56 @@ export default function App() {
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
                 <TransportDrivers />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/maintenance"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportMaintenance />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/maintenance/preventive"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportMaintenancePreventive />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/maintenance/predictive"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportMaintenancePredictive />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/maintenance/corrective"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportMaintenanceCorrective />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/maintenance/checklist"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportMaintenanceChecklist />
               </ModuleRoute>
             </ProtectedRoute>
           }
