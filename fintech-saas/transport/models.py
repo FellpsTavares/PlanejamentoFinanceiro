@@ -167,6 +167,8 @@ class Trip(models.Model):
     is_received = models.BooleanField(default=False)
     base_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     fuel_expense_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Lista de gastos individuais: [{"valor": 28.0, "descricao": "Balsa"}, ...]
+    expense_items = models.JSONField(default=list, blank=True, null=True)
     initial_km = models.PositiveIntegerField(null=True, blank=True)
     final_km = models.PositiveIntegerField(null=True, blank=True)
     # litros abastecidos durante a viagem (pode ser informado manualmente)
@@ -205,6 +207,81 @@ class Trip(models.Model):
         self.fuel_expense_value = fuel_expense_sum
         self.expense_value = (self.base_expense_value or 0) + (self.fuel_expense_value or 0) + (self.driver_payment or 0)
         self.save(update_fields=['is_received', 'base_expense_value', 'fuel_expense_value', 'expense_value'])
+
+    def sync_expense_movements(self):
+        """
+        Sincroniza os gastos (base_expense_value, fuel_expense_value e expense_items) 
+        criando TripMovement automaticamente para que apareçam nos relatórios.
+        """
+        from decimal import Decimal
+        import re
+        
+        # Limpar movements automáticos anteriores
+        trip_date = self.start_date or self.date
+        existing_auto_movements = self.movements.filter(
+            date=trip_date,
+            movement_type='expense'
+        )
+        existing_auto_movements.delete()
+        
+        # 1. Criar movimentações de gastos individuais (expense_items)
+        if self.expense_items:
+            for item in self.expense_items:
+                valor = Decimal(str(item.get('valor', 0)))
+                descricao = item.get('descricao', 'Outros gastos')
+                
+                if valor > 0:
+                    TripMovement.objects.create(
+                        trip=self,
+                        date=trip_date,
+                        movement_type='expense',
+                        expense_category='other',
+                        amount=valor,
+                        description=descricao
+                    )
+        # 2. Se não tem expense_items, usar base_expense_value (compatibilidade)
+        elif self.base_expense_value and self.base_expense_value > 0:
+            # Extrair descrição do gasto usando marcador [GASTO:...] ou padrão legacy
+            gasto_desc = None
+            if self.description:
+                match = re.search(r'\[GASTO:([^\]]+)\]', self.description)
+                if match:
+                    gasto_desc = match.group(1).strip()
+                elif ' | ' in self.description:
+                    parts = self.description.split(' | ')
+                    last_part = parts[-1].strip()
+                    last_part = re.sub(r'^Gastos\s+gerais:\s*', '', last_part, flags=re.IGNORECASE)
+                    last_part = re.sub(r'\s*(gastos\s+com\s+combust[íi]ve[il]s?|combust[íi]ve[il]s?).*$', '', last_part, flags=re.IGNORECASE)
+                    last_part = last_part.strip()
+                    
+                    if last_part and not any(x in last_part.lower() for x in ['fazenda', 'porto', ' x ', 'ton', 'km']):
+                        gasto_desc = last_part
+            
+            movement_desc = gasto_desc if gasto_desc else ''
+            TripMovement.objects.create(
+                trip=self,
+                date=trip_date,
+                movement_type='expense',
+                expense_category='other',
+                amount=self.base_expense_value,
+                description=movement_desc
+            )
+        
+        # 3. Criar movement de combustível
+        if self.fuel_expense_value and self.fuel_expense_value > 0:
+            TripMovement.objects.create(
+                trip=self,
+                date=trip_date,
+                movement_type='expense',
+                expense_category='fuel',
+                amount=self.fuel_expense_value,
+                description='Combustível'
+            )
+        
+        # Limpar o marcador [GASTO:...] do campo description
+        if self.description and '[GASTO:' in self.description:
+            self.description = re.sub(r'\s*\[GASTO:[^\]]+\]', '', self.description).strip()
+            self.save(update_fields=['description'])
 
 
 class TripMovement(models.Model):

@@ -1,8 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { authService } from './services/auth';
 import ProtectedRoute from './components/ProtectedRoute';
 import ToastContainer from './components/ToastContainer';
+import ChatWidget from './components/ChatWidget';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
@@ -34,6 +35,35 @@ import ChangePassword from './pages/ChangePassword';
 import Reports from './pages/Reports';
  
 
+function ChatFloatingButton() {
+  const [chatOpen, setChatOpen] = useState(false);
+  const location = useLocation();
+  const isAuthenticated = authService.isAuthenticated();
+  const isLoginPage = location.pathname === '/login';
+  const isChangePasswordPage = location.pathname === '/change-password';
+
+  // Não mostrar botão na página de login ou troca de senha
+  if (!isAuthenticated || isLoginPage || isChangePasswordPage) {
+    return null;
+  }
+
+  return (
+    <>
+      {/* Botão flutuante */}
+      <button
+        onClick={() => setChatOpen(!chatOpen)}
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center text-2xl"
+        title="Abrir Chat Assistente"
+      >
+        💬
+      </button>
+
+      {/* Widget de chat */}
+      <ChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />
+    </>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     // Ao montar a app, se autenticado, buscar /users/me para sincronizar user
@@ -44,6 +74,7 @@ export default function App() {
   return (
     <Router>
       <ToastContainer />
+      <ChatFloatingButton />
       <Routes>
         {/* Rota de Login */}
         <Route path="/login" element={<Login />} />

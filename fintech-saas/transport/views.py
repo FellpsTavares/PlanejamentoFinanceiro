@@ -345,7 +345,14 @@ class TripViewSet(viewsets.ModelViewSet):
         user_tenant = getattr(self.request.user, 'tenant', None)
         if not vehicle or vehicle.tenant != user_tenant:
             raise serializers.ValidationError({'vehicle': 'Veículo inválido ou não pertence ao tenant do usuário.'})
-        serializer.save()
+        trip = serializer.save()
+        # Sincronizar gastos como movements para aparecerem nos relatórios
+        trip.sync_expense_movements()
+
+    def perform_update(self, serializer):
+        trip = serializer.save()
+        # Sincronizar gastos como movements após atualização
+        trip.sync_expense_movements()
 
     @action(detail=True, methods=['get', 'post'], url_path='movements')
     def movements(self, request, pk=None):
