@@ -139,7 +139,7 @@ class TripSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'vehicle', 'date', 'start_date', 'end_date', 'modality', 'progress_type', 'tons', 'rate_per_ton',
             'days', 'daily_rate', 'total_value', 'is_received',
-            'base_expense_value', 'fuel_expense_value', 'initial_km', 'final_km',
+            'base_expense_value', 'fuel_expense_value', 'expense_items', 'initial_km', 'final_km',
             # novo: litros abastecidos e consumo calculado
             'fuel_liters', 'consumption_km_per_liter', 'driver_is_owner',
             'driver', 'driver_name',

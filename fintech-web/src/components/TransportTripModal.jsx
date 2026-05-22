@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
-import { formatDecimalStringToBRL, normalizeInputDecimal } from '../utils/format';
+import { formatDecimalStringToBRL, normalizeInputDecimal, formatQuantityDisplay } from '../utils/format';
 
 export default function TransportTripModal({ open, onClose, vehicleId, initial, onSaved }) {
   const navigate = useNavigate();
@@ -28,7 +28,14 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
   const [driverPctType, setDriverPctType] = useState('bruta');
   const [saving, setSaving] = useState(false);
 
-  const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
+  const parseMoney = (value) => {
+    if (value === null || value === undefined) return 0;
+    let s = String(value).trim();
+    if (!s) return 0;
+    s = s.replace(/\./g, '').replace(/,/g, '.');
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -50,7 +57,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
 
       if (initial) {
         setModality(initial.modality || 'per_ton');
-        setTons(initial.tons != null ? String(initial.tons) : '');
+        setTons(initial.tons != null ? formatQuantityDisplay(initial.tons) : '');
         setRatePerTon(initial.rate_per_ton != null ? String(initial.rate_per_ton) : '');
         setDays(initial.days != null ? String(initial.days) : '');
         setDailyRate(initial.daily_rate != null ? String(initial.daily_rate) : '');
@@ -282,10 +289,19 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2 text-sm font-medium">
-                <input type="checkbox" checked={isReceived} onChange={(e) => setIsReceived(e.target.checked)} />
-                Valor da viagem já recebido
+            <div className="flex items-center pb-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={isReceived}
+                    onChange={(e) => setIsReceived(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-checked:bg-blue-600 rounded-full transition-colors"></div>
+                  <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                </div>
+                <span className="text-sm font-medium text-gray-700">Valor da viagem já recebido</span>
               </label>
             </div>
           </div>
