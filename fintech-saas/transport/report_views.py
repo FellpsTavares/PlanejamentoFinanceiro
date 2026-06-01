@@ -217,7 +217,7 @@ class TransportReportView(APIView):
 
     @staticmethod
     def _build_pdf(title, subtitle, summary_items, columns, rows):
-        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -225,14 +225,14 @@ class TransportReportView(APIView):
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
-            buffer, pagesize=A4,
-            leftMargin=18 * mm, rightMargin=18 * mm,
-            topMargin=20 * mm, bottomMargin=18 * mm,
+            buffer, pagesize=landscape(A4),  # ✅ Mudado para horizontal
+            leftMargin=15 * mm, rightMargin=15 * mm,  # ✅ Margens reduzidas
+            topMargin=15 * mm, bottomMargin=15 * mm,
         )
         styles = getSampleStyleSheet()
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, spaceAfter=6)
-        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.grey, spaceAfter=10)
-        small_bold = ParagraphStyle('SmallBold', parent=styles['Heading4'], fontName='Helvetica-Bold', fontSize=10)
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=14, spaceAfter=4)  # ✅ Fonte menor
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=8, textColor=colors.grey, spaceAfter=8)
+        small_bold = ParagraphStyle('SmallBold', parent=styles['Heading4'], fontName='Helvetica-Bold', fontSize=9)
         normal = styles['Normal']
 
         story = []
@@ -257,19 +257,21 @@ class TransportReportView(APIView):
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-            ('TOPPADDING', (0, 0), (-1, 0), 6),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),  # ✅ Fonte reduzida para caber mais colunas
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 4),  # ✅ Padding reduzido
+            ('TOPPADDING', (0, 0), (-1, 0), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
             ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#E5E7EB')),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFAFB')]),
         ]))
         story.append(tbl)
-        story.append(Spacer(1, 12))
+        story.append(Spacer(1, 8))  # ✅ Espaçamento reduzido
 
         generated_at = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
         story.append(Paragraph(
             f'Relatório gerado em: {generated_at}',
-            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.grey)
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.grey)  # ✅ Fonte menor
         ))
 
         doc.build(story)
