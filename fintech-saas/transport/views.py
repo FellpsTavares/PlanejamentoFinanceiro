@@ -350,9 +350,23 @@ class TripViewSet(viewsets.ModelViewSet):
         trip.sync_expense_movements()
 
     def perform_update(self, serializer):
+        # Verificar se houve mudança nos campos de gastos
+        instance = self.get_object()
+        old_base_expense = instance.base_expense_value
+        old_fuel_expense = instance.fuel_expense_value
+        old_expense_items = instance.expense_items
+        
         trip = serializer.save()
-        # Sincronizar gastos como movements após atualização
-        trip.sync_expense_movements()
+        
+        # Sincronizar gastos apenas se houve alteração nos campos de gastos
+        expense_fields_changed = (
+            trip.base_expense_value != old_base_expense or
+            trip.fuel_expense_value != old_fuel_expense or
+            trip.expense_items != old_expense_items
+        )
+        
+        if expense_fields_changed:
+            trip.sync_expense_movements()
 
     @action(detail=True, methods=['get', 'post'], url_path='movements')
     def movements(self, request, pk=None):

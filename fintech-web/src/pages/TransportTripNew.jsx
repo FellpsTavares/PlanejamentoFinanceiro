@@ -316,15 +316,15 @@ export default function TransportTripNew() {
         {modality === 'per_ton' && (
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium">Toneladas</label>
-                <input className="input-field w-full" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" value={tons} onChange={e => setTons(e.target.value)} />
-            </div>
-            <div>
               <label className="block text-sm font-medium">Valor por Tonelada</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
                 <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={ratePerTon} onChange={e => setRatePerTon(e.target.value)} />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Toneladas</label>
+                <input className="input-field w-full" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" value={tons} onChange={e => setTons(e.target.value)} />
             </div>
           </div>
         )}

@@ -212,15 +212,16 @@ class Trip(models.Model):
         """
         Sincroniza os gastos (base_expense_value, fuel_expense_value e expense_items) 
         criando TripMovement automaticamente para que apareçam nos relatórios.
+        IMPORTANTE: Deleta apenas movimentações automáticas, preservando as manuais.
         """
         from decimal import Decimal
         import re
         
-        # Limpar movements automáticos anteriores
+        # Limpar APENAS movements automáticos anteriores (não deletar os manuais!)
         trip_date = self.start_date or self.date
         existing_auto_movements = self.movements.filter(
-            date=trip_date,
-            movement_type='expense'
+            movement_type='expense',
+            is_auto_generated=True
         )
         existing_auto_movements.delete()
         
@@ -237,7 +238,8 @@ class Trip(models.Model):
                         movement_type='expense',
                         expense_category='other',
                         amount=valor,
-                        description=descricao
+                        description=descricao,
+                        is_auto_generated=True  # Marcar como automática
                     )
         # 2. Se não tem expense_items, usar base_expense_value (compatibilidade)
         elif self.base_expense_value and self.base_expense_value > 0:
@@ -264,7 +266,8 @@ class Trip(models.Model):
                 movement_type='expense',
                 expense_category='other',
                 amount=self.base_expense_value,
-                description=movement_desc
+                description=movement_desc,
+                is_auto_generated=True  # Marcar como automática
             )
         
         # 3. Criar movement de combustível
@@ -275,7 +278,8 @@ class Trip(models.Model):
                 movement_type='expense',
                 expense_category='fuel',
                 amount=self.fuel_expense_value,
-                description='Combustível'
+                description='Combustível',
+                is_auto_generated=True  # Marcar como automática
             )
         
         # Limpar o marcador [GASTO:...] do campo description
@@ -301,6 +305,7 @@ class TripMovement(models.Model):
     expense_category = models.CharField(max_length=20, choices=EXPENSE_CATEGORY_CHOICES, blank=True, default='')
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     description = models.CharField(max_length=255, blank=True, default='')
+    is_auto_generated = models.BooleanField(default=False, help_text='Indica se esta movimentação foi criada automaticamente pelo sistema')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
