@@ -59,9 +59,63 @@ class DriverSerializer(serializers.ModelSerializer):
 
 
 class FuelLogSerializer(serializers.ModelSerializer):
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
+    fuel_type_display = serializers.CharField(source='get_fuel_type_display', read_only=True)
+    # Opcional na entrada: se omitido, é calculado a partir de liters * price_per_liter - discount.
+    paid_value = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
     class Meta:
         model = FuelLog
-        fields = ['id', 'vehicle', 'date', 'odometer_km', 'liters', 'total_value']
+        fields = [
+            'id', 'tenant', 'vehicle', 'vehicle_plate', 'vehicle_model', 'date', 'odometer_km',
+            'fuel_type', 'fuel_type_display', 'liters', 'price_per_liter', 'discount', 'paid_value',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'tenant', 'vehicle_plate', 'vehicle_model', 'fuel_type_display', 'created_at', 'updated_at']
+
+    def validate(self, data):
+        vehicle = data.get('vehicle', getattr(self.instance, 'vehicle', None))
+        odometer_km = data.get('odometer_km', getattr(self.instance, 'odometer_km', None))
+        if vehicle and odometer_km is not None:
+            last_log = FuelLog.objects.filter(vehicle=vehicle).exclude(pk=getattr(self.instance, 'pk', None)).order_by('-date', '-id').first()
+            if last_log and odometer_km < last_log.odometer_km:
+                raise serializers.ValidationError({
+                    'odometer_km': f'Quilometragem não pode ser menor que a do último abastecimento registrado ({last_log.odometer_km} km).'
+                })
+
+        if not data.get('paid_value'):
+            price_per_liter = data.get('price_per_liter', getattr(self.instance, 'price_per_liter', None))
+            if price_per_liter is None:
+                raise serializers.ValidationError({
+                    'paid_value': 'Informe o valor pago ou o valor por litro para cálculo automático.'
+                })
+        return data
+
+    def _compute_paid_value(self, validated_data, instance=None):
+        liters = validated_data.get('liters', getattr(instance, 'liters', None))
+        price_per_liter = validated_data.get('price_per_liter', getattr(instance, 'price_per_liter', None))
+        discount = validated_data.get('discount', getattr(instance, 'discount', None) or Decimal('0'))
+        if liters is not None and price_per_liter is not None:
+            gross = (Decimal(liters) * Decimal(price_per_liter)) - Decimal(discount)
+            return gross.quantize(Decimal('0.01'))
+        return None
+
+    def create(self, validated_data):
+        if not validated_data.get('paid_value'):
+            computed = self._compute_paid_value(validated_data)
+            if computed is not None:
+                validated_data['paid_value'] = computed
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if 'paid_value' in validated_data and not validated_data.get('paid_value'):
+            computed = self._compute_paid_value(validated_data, instance)
+            if computed is not None:
+                validated_data['paid_value'] = computed
+            else:
+                validated_data.pop('paid_value')
+        return super().update(instance, validated_data)
 
 
 class TransportRevenueSerializer(serializers.ModelSerializer):
@@ -113,8 +167,9 @@ class VehicleSerializer(serializers.ModelSerializer):
         return vehicle
 
     def get_avg_consumption(self, obj):
-        # Busca os dois últimos registros de FuelLog do veículo
-        logs = FuelLog.objects.filter(vehicle=obj).order_by('-date', '-id')[:2]
+        # Busca os dois últimos abastecimentos de Diesel do veículo.
+        # Arla não entra no cálculo: é aditivo de escapamento, não combustível de propulsão.
+        logs = FuelLog.objects.filter(vehicle=obj, fuel_type=FuelLog.FUEL_DIESEL).order_by('-date', '-id')[:2]
         if len(logs) < 2:
             return None
         current = logs[0]

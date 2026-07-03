@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_date
 from django.utils import timezone
 from decimal import Decimal
 
-from .models import Vehicle, TransportRevenue, TransportExpense
+from .models import Vehicle, TransportRevenue, TransportExpense, FuelLog
 from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
 from .models import PreventivePlan, PredictiveReading, CorrectiveMaintenance, SafetyChecklist
 from .serializers import (
@@ -28,6 +28,7 @@ from .serializers import (
     PredictiveReadingSerializer,
     CorrectiveMaintenanceSerializer,
     SafetyChecklistSerializer,
+    FuelLogSerializer,
 )
 from .permissions import HasTransportModule
 
@@ -350,9 +351,23 @@ class TripViewSet(viewsets.ModelViewSet):
         trip.sync_expense_movements()
 
     def perform_update(self, serializer):
+        # Verificar se houve mudança nos campos de gastos
+        instance = self.get_object()
+        old_base_expense = instance.base_expense_value
+        old_fuel_expense = instance.fuel_expense_value
+        old_expense_items = instance.expense_items
+        
         trip = serializer.save()
-        # Sincronizar gastos como movements após atualização
-        trip.sync_expense_movements()
+        
+        # Sincronizar gastos apenas se houve alteração nos campos de gastos
+        expense_fields_changed = (
+            trip.base_expense_value != old_base_expense or
+            trip.fuel_expense_value != old_fuel_expense or
+            trip.expense_items != old_expense_items
+        )
+        
+        if expense_fields_changed:
+            trip.sync_expense_movements()
 
     @action(detail=True, methods=['get', 'post'], url_path='movements')
     def movements(self, request, pk=None):
@@ -550,6 +565,23 @@ class CorrectiveMaintenanceViewSet(viewsets.ModelViewSet):
         if tenant:
             return CorrectiveMaintenance.objects.filter(tenant=tenant).select_related('vehicle')
         return CorrectiveMaintenance.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+class FuelLogViewSet(viewsets.ModelViewSet):
+    queryset = FuelLog.objects.all()
+    serializer_class = FuelLogSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'fuel_type', 'date']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return FuelLog.objects.filter(tenant=tenant).select_related('vehicle')
+        return FuelLog.objects.none()
 
     def perform_create(self, serializer):
         tenant = getattr(self.request.user, 'tenant', None)

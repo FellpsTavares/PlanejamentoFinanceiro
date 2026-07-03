@@ -4,6 +4,7 @@ import { transportService } from '../services/transport';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
+import CurrencyInput from '../components/CurrencyInput';
 
 export default function TransportTrips() {
   const navigate = useNavigate();
@@ -41,7 +42,13 @@ export default function TransportTrips() {
   const [showInProgressExpanded, setShowInProgressExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
+  const parseMoney = (value) => {
+    if (!value) return 0;
+    const str = String(value).trim();
+    // Remove separadores de milhar (pontos) e converte vírgula decimal para ponto
+    // Suporta: "2.155,00" → 2155.00, "2155,00" → 2155.00, "2155.5" → 2155.5
+    return Number(str.replace(/\./g, '').replace(',', '.')) || 0;
+  };
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const formatApiDate = (value) => {
     if (!value) return '—';
@@ -245,6 +252,26 @@ export default function TransportTrips() {
     } catch (err) {
       console.error('Erro ao encerrar viagem', err);
       toast('Erro ao encerrar viagem', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReopenTrip = async () => {
+    if (!selectedTrip) return;
+    if (!window.confirm('Deseja reabrir esta viagem? Ela voltará ao status "Em curso" e poderá receber novos lançamentos.')) return;
+
+    try {
+      setSaving(true);
+      const payload = {
+        status: 'in_progress',
+      };
+      await transportService.updateTrip(selectedTrip.id, payload);
+      toast('Viagem reaberta com sucesso', 'success');
+      await loadTrips();
+    } catch (err) {
+      console.error('Erro ao reabrir viagem', err);
+      toast('Erro ao reabrir viagem', 'error');
     } finally {
       setSaving(false);
     }
@@ -586,9 +613,18 @@ export default function TransportTrips() {
                   <input className="input-field w-full" value={finalKm} onChange={(e) => setFinalKm(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
                 </div>
                 <div className="flex items-end pb-2">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input type="checkbox" checked={isReceived} onChange={(e) => setIsReceived(e.target.checked)} disabled={selectedTrip.status !== 'in_progress'} />
-                    Valor da viagem já recebido
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={isReceived}
+                        onChange={(e) => setIsReceived(e.target.checked)}
+                        disabled={selectedTrip.status !== 'in_progress'}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">Valor da viagem já recebido</span>
                   </label>
                 </div>
               </div>
@@ -616,7 +652,7 @@ export default function TransportTrips() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium">Valor (R$)</label>
-                    <input className="input-field w-full" value={movementAmount} onChange={(e) => setMovementAmount(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+                    <CurrencyInput className="input-field w-full" value={movementAmount} onChange={(e) => setMovementAmount(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
                   </div>
                 </div>
 
@@ -690,7 +726,12 @@ export default function TransportTrips() {
                     </button>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-600">Esta viagem já foi encerrada.</p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-gray-600">Esta viagem já foi encerrada.</p>
+                    <button type="button" className="btn btn-secondary" onClick={handleReopenTrip} disabled={saving}>
+                      {saving ? 'Reabrindo...' : '🔄 Reabrir viagem'}
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

@@ -48,6 +48,7 @@ export default function Sidebar() {
           { to: '/transport/vehicles', label: 'Veículos' },
           { to: '/transport/drivers', label: 'Motoristas' },
           { to: '/transport/maintenance', label: 'Manutenção' },
+          { to: '/transport/fuel-refills', label: 'Abastecimento' },
         ],
       });
     }

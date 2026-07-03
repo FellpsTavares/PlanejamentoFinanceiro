@@ -232,4 +232,21 @@ export const transportService = {
   deleteSafetyChecklist: async (id) => {
     await api.delete(`/transport/safety-checklists/${id}/`);
   },
+
+  // Abastecimentos
+  getFuelLogs: async (params = {}) => {
+    const res = await api.get('/transport/fuel-logs/', { params });
+    return res.data;
+  },
+  createFuelLog: async (payload) => {
+    const res = await api.post('/transport/fuel-logs/', payload);
+    return res.data;
+  },
+  updateFuelLog: async (id, payload) => {
+    const res = await api.patch(`/transport/fuel-logs/${id}/`, payload);
+    return res.data;
+  },
+  deleteFuelLog: async (id) => {
+    await api.delete(`/transport/fuel-logs/${id}/`);
+  },
 };

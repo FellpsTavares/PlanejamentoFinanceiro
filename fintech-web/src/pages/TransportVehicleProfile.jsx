@@ -6,8 +6,10 @@ import api from '../services/api';
 import TransportEntryExpenseModal from '../components/TransportEntryExpenseModal';
 import ConfirmModal from '../components/ConfirmModal';
 import TransportTripModal from '../components/TransportTripModal';
-import { toast } from '../utils/toast';
-import { formatDecimalStringToBRL, formatDecimalString } from '../utils/format';
+import CurrencyInput from '../components/CurrencyInput';
+import { toast, extractApiError } from '../utils/toast';
+import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal } from '../utils/format';
+import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
 const MAX_AXLES_ALLOWED = 12;
 
@@ -59,8 +61,9 @@ export default function TransportVehicleProfile() {
   const [tires, setTires] = useState([]);
   const [placements, setPlacements] = useState([]);
   const [maintenanceLogs, setMaintenanceLogs] = useState([]);
+  const [fuelLogs, setFuelLogs] = useState([]);
 
-  const [activeAccordion, setActiveAccordion] = useState({ tires: false, maintenance: false, edit: false });
+  const [activeAccordion, setActiveAccordion] = useState({ tires: false, maintenance: false, fuel: false, edit: false });
 
   const [tireForm, setTireForm] = useState({
     brand: '',
@@ -80,6 +83,17 @@ export default function TransportVehicleProfile() {
     type: 'full_change',
     next_change_km_interval: '',
     next_change_date_interval: '',
+  });
+
+  const [fuelForm, setFuelForm] = useState({
+    date: '',
+    fuel_type: 'diesel',
+    odometer_km: '',
+    liters: '',
+    price_per_liter: '',
+    discount: '',
+    paid_value: '',
+    autoCalcPaidValue: true,
   });
 
   const [slotRegistrationDate, setSlotRegistrationDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -146,14 +160,16 @@ export default function TransportVehicleProfile() {
   };
 
   const refreshTransportAssets = async () => {
-    const [tireData, placementData, maintenanceData] = await Promise.all([
+    const [tireData, placementData, maintenanceData, fuelData] = await Promise.all([
       transportService.getTires(),
       transportService.getTirePlacements({ vehicle: id }),
       transportService.getMaintenanceLogs({ vehicle: id }),
+      transportService.getFuelLogs({ vehicle: id }),
     ]);
     setTires(tireData.results || tireData);
     setPlacements(placementData.results || placementData);
     setMaintenanceLogs(maintenanceData.results || maintenanceData);
+    setFuelLogs(fuelData.results || fuelData);
   };
 
   const refreshTrips = async () => {
@@ -349,6 +365,58 @@ export default function TransportVehicleProfile() {
       toast('Erro ao registrar manutenção', 'error');
     }
   };
+
+  const handleCreateFuelLog = async (e) => {
+    e.preventDefault();
+    try {
+      const liters = normalizeInputDecimal(fuelForm.liters || '0');
+      const pricePerLiter = normalizeInputDecimal(fuelForm.price_per_liter || '0');
+      const discount = normalizeInputDecimal(fuelForm.discount || '0');
+      const payload = {
+        vehicle: id,
+        date: fuelForm.date,
+        fuel_type: fuelForm.fuel_type,
+        odometer_km: Number(fuelForm.odometer_km || 0),
+        liters,
+        price_per_liter: pricePerLiter || null,
+        discount,
+      };
+      if (!fuelForm.autoCalcPaidValue) {
+        payload.paid_value = normalizeInputDecimal(fuelForm.paid_value || '0');
+      }
+      await transportService.createFuelLog(payload);
+      setFuelForm({
+        date: '', fuel_type: 'diesel', odometer_km: '', liters: '',
+        price_per_liter: '', discount: '', paid_value: '', autoCalcPaidValue: true,
+      });
+      await Promise.all([refreshTransportAssets(), refreshVehicle()]);
+      toast('Abastecimento registrado', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(extractApiError(err, 'Erro ao registrar abastecimento'), 'error');
+    }
+  };
+
+  const handleDeleteFuelLog = async (fuelLogId) => {
+    if (!window.confirm('Excluir este abastecimento?')) return;
+    try {
+      await transportService.deleteFuelLog(fuelLogId);
+      await Promise.all([refreshTransportAssets(), refreshVehicle()]);
+      toast('Abastecimento excluído', 'success');
+    } catch (err) {
+      console.error(err);
+      toast('Erro ao excluir abastecimento', 'error');
+    }
+  };
+
+  const previewPaidValue = (() => {
+    if (!fuelForm.autoCalcPaidValue) return fuelForm.paid_value;
+    const gross = multiplyDecimalStrings(fuelForm.liters || '0', fuelForm.price_per_liter || '0');
+    const net = subtractDecimalStrings(gross, fuelForm.discount || '0');
+    // CurrencyInput (Cleave) espera vírgula decimal/ponto de milhar (formato BR);
+    // multiplyDecimalStrings/subtractDecimalStrings retornam ponto decimal cru.
+    return formatDecimalString(net, 2);
+  })();
 
   if (loading) return <LoadingOverlay message="Carregando veículo..." />;
   if (error) return <div className="p-6 text-red-600">Erro: {typeof error === 'string' ? error : JSON.stringify(error)}</div>;
@@ -750,6 +818,83 @@ export default function TransportVehicleProfile() {
                         Óleo: {m.oil_change.oil_brand} • {m.oil_change.quantity_liters}L • {m.oil_change.type === 'full_change' ? 'Troca completa' : 'Completar nível'}
                       </div>
                     )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="border rounded">
+          <button className="w-full text-left px-4 py-3 font-semibold bg-gray-50" onClick={() => setActiveAccordion((p) => ({ ...p, fuel: !p.fuel }))}>
+            Abastecimentos
+          </button>
+          {activeAccordion.fuel && (
+            <div className="p-4 space-y-4">
+              <form className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3" onSubmit={handleCreateFuelLog}>
+                <div>
+                  <label className="text-xs text-gray-600">Data</label>
+                  <input className="input" type="date" value={fuelForm.date} onChange={(e) => setFuelForm((p) => ({ ...p, date: e.target.value }))} required />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Tipo de combustível</label>
+                  <select className="input" value={fuelForm.fuel_type} onChange={(e) => setFuelForm((p) => ({ ...p, fuel_type: e.target.value }))}>
+                    <option value="diesel">Diesel</option>
+                    <option value="arla">Arla</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Quilometragem atual</label>
+                  <input className="input" type="number" min="0" placeholder="KM" value={fuelForm.odometer_km} onChange={(e) => setFuelForm((p) => ({ ...p, odometer_km: sanitizeIntegerInput(e.target.value, { min: 0, max: 999999999, allowEmpty: true }) }))} required />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Litros</label>
+                  <input className="input" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" placeholder="Litros" value={fuelForm.liters} onChange={(e) => setFuelForm((p) => ({ ...p, liters: e.target.value }))} required />
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-600">Valor por litro</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                    <CurrencyInput className="input" style={{ paddingLeft: '2.75rem' }} value={fuelForm.price_per_liter} onChange={(e) => setFuelForm((p) => ({ ...p, price_per_liter: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Desconto</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                    <CurrencyInput className="input" style={{ paddingLeft: '2.75rem' }} value={fuelForm.discount} onChange={(e) => setFuelForm((p) => ({ ...p, discount: e.target.value }))} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Valor pago</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                    <CurrencyInput
+                      className="input"
+                      style={{ paddingLeft: '2.75rem' }}
+                      value={previewPaidValue}
+                      disabled={fuelForm.autoCalcPaidValue}
+                      onChange={(e) => setFuelForm((p) => ({ ...p, paid_value: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <label className="text-sm flex items-center gap-2 self-end pb-2">
+                  <input type="checkbox" checked={fuelForm.autoCalcPaidValue} onChange={(e) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: e.target.checked }))} />
+                  Calcular valor pago automaticamente
+                </label>
+
+                <button type="submit" className="btn btn-primary md:col-span-4">Registrar abastecimento</button>
+              </form>
+
+              <ul className="space-y-2">
+                {fuelLogs.map((f) => (
+                  <li key={f.id} className="border rounded p-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{new Date(f.date).toLocaleDateString('pt-BR')} • {f.fuel_type_display} • KM {formatNumber(f.odometer_km, 0, 0)}</div>
+                      <div className="text-sm text-gray-600">{formatNumber(f.liters, 0, 3)} L • {formatBRL(f.paid_value)}{Number(f.discount) > 0 ? ` (desconto ${formatBRL(f.discount)})` : ''}</div>
+                    </div>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFuelLog(f.id)}>Excluir</button>
                   </li>
                 ))}
               </ul>
