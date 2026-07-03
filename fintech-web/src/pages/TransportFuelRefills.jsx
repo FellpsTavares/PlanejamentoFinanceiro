@@ -3,7 +3,7 @@ import { transportService } from '../services/transport';
 import { toast, extractApiError } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import CurrencyInput from '../components/CurrencyInput';
-import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal } from '../utils/format';
+import { formatDecimalStringToBRL, formatDecimalString, formatQuantityDisplay, normalizeInputDecimal } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
 const formatBRL = (value) => formatDecimalStringToBRL(value, 2);
@@ -72,7 +72,12 @@ export default function TransportFuelRefills() {
       date: log.date || '',
       fuel_type: log.fuel_type,
       odometer_km: String(log.odometer_km ?? ''),
-      liters: String(log.liters ?? ''),
+      // A API retorna liters com 3 casas decimais (ex: "629.590"). Se essa string cair
+      // crua num input de texto, normalizeInputDecimal() a interpreta erroneamente como
+      // separador de milhar BR (heurística: ponto + exatamente 3 dígitos após) e multiplica
+      // o valor por 1000 ao salvar sem o campo ser reescrito. formatQuantityDisplay converte
+      // para o formato BR correto (vírgula) e remove zeros à direita.
+      liters: log.liters != null ? formatQuantityDisplay(log.liters) : '',
       // CurrencyInput (Cleave) espera formato BR (vírgula decimal); a API retorna ponto decimal.
       price_per_liter: log.price_per_liter != null ? formatDecimalString(log.price_per_liter, 2) : '',
       discount: log.discount != null ? formatDecimalString(log.discount, 2) : '',
