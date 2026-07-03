@@ -29,5 +29,6 @@ class TransportExpenseAdmin(admin.ModelAdmin):
 
 @admin.register(FuelLog)
 class FuelLogAdmin(admin.ModelAdmin):
-    list_display = ('vehicle', 'date', 'odometer_km', 'liters')
+    list_display = ('vehicle', 'date', 'fuel_type', 'odometer_km', 'liters', 'paid_value', 'tenant')
+    list_filter = ('fuel_type', 'tenant')
     ordering = ('-date',)

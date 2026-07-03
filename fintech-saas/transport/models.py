@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from django.db import models
 from django.db.models import Sum, F, IntegerField, ExpressionWrapper
@@ -121,12 +122,24 @@ class TransportExpense(models.Model):
 
 
 class FuelLog(models.Model):
+    FUEL_DIESEL = 'diesel'
+    FUEL_ARLA = 'arla'
+    FUEL_TYPE_CHOICES = (
+        (FUEL_DIESEL, 'Diesel'),
+        (FUEL_ARLA, 'Arla'),
+    )
+
+    tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='fuel_logs')
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='fuel_logs')
     date = models.DateField()
     odometer_km = models.PositiveIntegerField(verbose_name=_('Odômetro (KM)'))
+    fuel_type = models.CharField(max_length=20, choices=FUEL_TYPE_CHOICES, default=FUEL_DIESEL, verbose_name=_('Tipo de combustível'))
     liters = models.DecimalField(max_digits=10, decimal_places=3)
-    total_value = models.DecimalField(max_digits=12, decimal_places=2)
+    price_per_liter = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, verbose_name=_('Valor por litro'))
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'), verbose_name=_('Desconto'))
+    paid_value = models.DecimalField(max_digits=12, decimal_places=2, verbose_name=_('Valor pago'))
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = _('Abastecimento')

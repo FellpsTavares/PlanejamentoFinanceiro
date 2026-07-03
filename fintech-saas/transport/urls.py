@@ -16,6 +16,7 @@ from .views import (
     CorrectiveMaintenanceViewSet,
     SafetyChecklistViewSet,
     MaintenanceDashboardView,
+    FuelLogViewSet,
 )
 from .report_views import TransportReportView
 
@@ -34,6 +35,7 @@ router.register(r'preventive-plans', PreventivePlanViewSet, basename='preventive
 router.register(r'predictive-readings', PredictiveReadingViewSet, basename='predictivereading')
 router.register(r'corrective-maintenances', CorrectiveMaintenanceViewSet, basename='correctivemaintenance')
 router.register(r'safety-checklists', SafetyChecklistViewSet, basename='safetychecklist')
+router.register(r'fuel-logs', FuelLogViewSet, basename='fuellog')
 
 urlpatterns = [
     path('', include(router.urls)),

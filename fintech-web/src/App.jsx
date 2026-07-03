@@ -28,6 +28,7 @@ import TransportMaintenancePreventive from './pages/TransportMaintenancePreventi
 import TransportMaintenancePredictive from './pages/TransportMaintenancePredictive';
 import TransportMaintenanceCorrective from './pages/TransportMaintenanceCorrective';
 import TransportMaintenanceChecklist from './pages/TransportMaintenanceChecklist';
+import TransportFuelRefills from './pages/TransportFuelRefills';
 import ModuleSettings from './pages/ModuleSettings';
 import AccountManagement from './pages/AccountManagement';
 import AdminUserManagement from './pages/AdminUserManagement';
@@ -298,6 +299,16 @@ export default function App() {
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
                 <TransportMaintenanceChecklist />
+              </ModuleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/transport/fuel-refills"
+          element={
+            <ProtectedRoute>
+              <ModuleRoute moduleFlag="has_module_transport">
+                <TransportFuelRefills />
               </ModuleRoute>
             </ProtectedRoute>
           }

@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_date
 from django.utils import timezone
 from decimal import Decimal
 
-from .models import Vehicle, TransportRevenue, TransportExpense
+from .models import Vehicle, TransportRevenue, TransportExpense, FuelLog
 from .models import Trip, TripMovement, TireInventory, VehicleTirePlacement, MaintenanceLog, OilChangeLog, MaintenanceAlert, Driver
 from .models import PreventivePlan, PredictiveReading, CorrectiveMaintenance, SafetyChecklist
 from .serializers import (
@@ -28,6 +28,7 @@ from .serializers import (
     PredictiveReadingSerializer,
     CorrectiveMaintenanceSerializer,
     SafetyChecklistSerializer,
+    FuelLogSerializer,
 )
 from .permissions import HasTransportModule
 
@@ -564,6 +565,23 @@ class CorrectiveMaintenanceViewSet(viewsets.ModelViewSet):
         if tenant:
             return CorrectiveMaintenance.objects.filter(tenant=tenant).select_related('vehicle')
         return CorrectiveMaintenance.objects.none()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        serializer.save(tenant=tenant)
+
+
+class FuelLogViewSet(viewsets.ModelViewSet):
+    queryset = FuelLog.objects.all()
+    serializer_class = FuelLogSerializer
+    permission_classes = [IsAuthenticated, HasTransportModule]
+    filterset_fields = ['vehicle', 'fuel_type', 'date']
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return FuelLog.objects.filter(tenant=tenant).select_related('vehicle')
+        return FuelLog.objects.none()
 
     def perform_create(self, serializer):
         tenant = getattr(self.request.user, 'tenant', None)
