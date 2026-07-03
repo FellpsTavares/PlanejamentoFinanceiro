@@ -105,6 +105,17 @@ _AGGREGATE_LABELS_PT = {
     'fleet_avg_consumption': 'Consumo Médio da Frota',
 }
 
+# Nome (em português) usado no arquivo PDF exportado — `report_type` continua em
+# inglês, é o valor aceito pela API via query param.
+_REPORT_TYPE_FILE_NAMES = {
+    'movements': 'lancamentos',
+    'trips': 'viagens_detalhadas',
+    'driver_payments': 'pagamentos_motorista',
+    'by_vehicle': 'resumo_por_veiculo',
+    'summary': 'resumo_por_categoria',
+    'fuel_consumption': 'consumo_combustivel',
+}
+
 
 # campos e rótulos para whitelist de ordenação
 _MOVEMENT_ORDER_FIELDS = {'date', 'amount', 'movement_type', 'expense_category', 'created_at'}
@@ -226,7 +237,7 @@ class TransportReportView(APIView):
             rows=rows,
         )
 
-        filename = f"relatorio_transporte_{report_type}.pdf"
+        filename = f"relatorio_transporte_{_REPORT_TYPE_FILE_NAMES.get(report_type, report_type)}.pdf"
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response

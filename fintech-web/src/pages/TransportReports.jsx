@@ -14,6 +14,17 @@ const REPORT_TYPES = [
   { key: 'fuel_consumption', label: 'Consumo de Combustível' },
 ];
 
+// Nome (em português) usado no arquivo exportado — `key` continua em inglês
+// porque é o valor aceito pela API (`report_type`), só o nome do arquivo muda.
+const REPORT_TYPE_FILE_NAMES = {
+  movements: 'lancamentos',
+  trips: 'viagens_detalhadas',
+  driver_payments: 'pagamentos_motorista',
+  by_vehicle: 'resumo_por_veiculo',
+  summary: 'resumo_por_categoria',
+  fuel_consumption: 'consumo_combustivel',
+};
+
 const COLUMNS = {
   movements: [
     { key: 'date', label: 'Data' },
@@ -257,7 +268,7 @@ export default function TransportReports() {
     try {
       await reportsService.downloadTransportReportCsv(
         buildParams(),
-        `relatorio_transporte_${reportType}_${new Date().toISOString().slice(0, 10)}.csv`
+        `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.csv`
       );
       toast('CSV exportado com sucesso.', 'success');
     } catch (err) {
@@ -274,7 +285,7 @@ export default function TransportReports() {
     try {
       await reportsService.downloadTransportReportPdf(
         buildParams(),
-        `relatorio_transporte_${reportType}_${new Date().toISOString().slice(0, 10)}.pdf`
+        `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.pdf`
       );
       toast('PDF exportado com sucesso.', 'success');
     } catch (err) {
