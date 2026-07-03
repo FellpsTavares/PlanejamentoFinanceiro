@@ -15,7 +15,7 @@ from decimal import Decimal
 from io import BytesIO
 from datetime import datetime
 
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Min, Max, Q
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 from rest_framework.views import APIView
@@ -26,7 +26,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from .models import Trip, TripMovement, Vehicle
+from .models import Trip, TripMovement, Vehicle, FuelLog
 from .permissions import HasTransportModule
 
 # Mapeamento de colunas para PDF por tipo de relatório: (chave_row, label_cabecalho)
@@ -75,6 +75,17 @@ _PDF_COLUMNS = {
         ('count', 'Lançamentos'),
         ('total', 'Total (R$)'),
     ],
+    'fuel_consumption': [
+        ('plate', 'Placa'),
+        ('model', 'Modelo'),
+        ('refuel_count', 'Abastecimentos'),
+        ('total_liters_diesel', 'Litros Diesel'),
+        ('total_liters_arla', 'Litros Arla'),
+        ('distance_km', 'KM Percorrido'),
+        ('avg_consumption', 'Consumo (km/l)'),
+        ('first_date', 'Primeiro Abastecimento'),
+        ('last_date', 'Último Abastecimento'),
+    ],
 }
 
 _AGGREGATE_LABELS_PT = {
@@ -89,6 +100,20 @@ _AGGREGATE_LABELS_PT = {
     'grand_expense_value': 'Despesas Total',
     'grand_net_value': 'Líquido Total',
     'grand_total': 'Total Geral',
+    'total_distance_km': 'Distância Total',
+    'total_liters_diesel': 'Litros de Diesel (Total)',
+    'fleet_avg_consumption': 'Consumo Médio da Frota',
+}
+
+# Nome (em português) usado no arquivo PDF exportado — `report_type` continua em
+# inglês, é o valor aceito pela API via query param.
+_REPORT_TYPE_FILE_NAMES = {
+    'movements': 'lancamentos',
+    'trips': 'viagens_detalhadas',
+    'driver_payments': 'pagamentos_motorista',
+    'by_vehicle': 'resumo_por_veiculo',
+    'summary': 'resumo_por_categoria',
+    'fuel_consumption': 'consumo_combustivel',
 }
 
 
@@ -145,6 +170,7 @@ class TransportReportView(APIView):
             'driver_payments': self._report_driver_payments,
             'by_vehicle': self._report_by_vehicle,
             'summary': self._report_summary,
+            'fuel_consumption': self._report_fuel_consumption,
         }
 
         handler = handlers.get(report_type)
@@ -190,6 +216,7 @@ class TransportReportView(APIView):
             'driver_payments': 'Pagamentos ao Motorista',
             'by_vehicle': 'Resumo por Veículo',
             'summary': 'Resumo por Categoria de Despesa',
+            'fuel_consumption': 'Consumo de Combustível',
         }
         title = f"Relatório de Transportadora — {report_labels.get(report_type, report_type)}"
 
@@ -210,7 +237,7 @@ class TransportReportView(APIView):
             rows=rows,
         )
 
-        filename = f"relatorio_transporte_{report_type}.pdf"
+        filename = f"relatorio_transporte_{_REPORT_TYPE_FILE_NAMES.get(report_type, report_type)}.pdf"
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
@@ -629,6 +656,121 @@ class TransportReportView(APIView):
                 'total': len(rows),
                 'aggregates': {
                     'grand_total': str(grand_total),
+                },
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # Relatório: Consumo de combustível por veículo (baseado em abastecimentos)
+    # ------------------------------------------------------------------
+    def _report_fuel_consumption(self, request, tenant):
+        params = request.query_params
+        start, end = self._get_dates(params)
+        vehicle_ids = self._vehicle_ids(params, tenant)
+
+        qs = FuelLog.objects.filter(vehicle__tenant=tenant)
+        if start:
+            qs = qs.filter(date__gte=start)
+        if end:
+            qs = qs.filter(date__lte=end)
+        if vehicle_ids is not None:
+            qs = qs.filter(vehicle_id__in=vehicle_ids)
+
+        # Consumo médio (km/l) é calculado só com abastecimentos de Diesel — Arla é
+        # aditivo de escapamento, não combustível de propulsão. Distância = maior menos
+        # menor odômetro registrado no período; litros = soma de todos os abastecimentos
+        # de Diesel no período (aproximação padrão: o primeiro abastecimento do período
+        # também entra na soma, então o consumo tende a ficar levemente subestimado em
+        # períodos com poucos abastecimentos).
+        diesel_agg = (
+            qs.filter(fuel_type=FuelLog.FUEL_DIESEL)
+            .values('vehicle__id', 'vehicle__plate', 'vehicle__model', 'vehicle__year')
+            .annotate(
+                refuel_count=Count('id'),
+                total_liters=Sum('liters'),
+                min_odometer=Min('odometer_km'),
+                max_odometer=Max('odometer_km'),
+                first_date=Min('date'),
+                last_date=Max('date'),
+            )
+            .order_by('vehicle__plate')
+        )
+
+        arla_totals = dict(
+            qs.filter(fuel_type=FuelLog.FUEL_ARLA)
+            .values('vehicle_id')
+            .annotate(total=Sum('liters'))
+            .values_list('vehicle_id', 'total')
+        )
+
+        rows = []
+        grand_distance = 0
+        grand_liters = Decimal('0')
+        diesel_vehicle_ids = set()
+
+        for row in diesel_agg:
+            vid = row['vehicle__id']
+            diesel_vehicle_ids.add(vid)
+            distance = max((row['max_odometer'] or 0) - (row['min_odometer'] or 0), 0)
+            liters = row['total_liters'] or Decimal('0')
+            avg_consumption = None
+            if distance > 0 and liters > 0 and row['refuel_count'] >= 2:
+                avg_consumption = round(distance / float(liters), 3)
+
+            grand_distance += distance
+            grand_liters += liters
+
+            rows.append({
+                'vehicle_id': vid,
+                'vehicle': f"{row['vehicle__plate']} - {row['vehicle__model']} ({row['vehicle__year']})",
+                'plate': row['vehicle__plate'],
+                'model': row['vehicle__model'],
+                'refuel_count': row['refuel_count'],
+                'total_liters_diesel': str(liters),
+                'total_liters_arla': str(arla_totals.get(vid) or Decimal('0')),
+                'distance_km': distance,
+                'avg_consumption': avg_consumption,
+                'first_date': str(row['first_date']) if row['first_date'] else None,
+                'last_date': str(row['last_date']) if row['last_date'] else None,
+            })
+
+        # Veículos com abastecimento só de Arla no período (sem Diesel) ainda entram
+        # no relatório, com as colunas de consumo/distância vazias.
+        only_arla = (
+            qs.filter(fuel_type=FuelLog.FUEL_ARLA)
+            .exclude(vehicle_id__in=diesel_vehicle_ids)
+            .values('vehicle__id', 'vehicle__plate', 'vehicle__model', 'vehicle__year')
+            .annotate(total=Sum('liters'))
+        )
+        for row in only_arla:
+            rows.append({
+                'vehicle_id': row['vehicle__id'],
+                'vehicle': f"{row['vehicle__plate']} - {row['vehicle__model']} ({row['vehicle__year']})",
+                'plate': row['vehicle__plate'],
+                'model': row['vehicle__model'],
+                'refuel_count': 0,
+                'total_liters_diesel': '0',
+                'total_liters_arla': str(row['total'] or Decimal('0')),
+                'distance_km': 0,
+                'avg_consumption': None,
+                'first_date': None,
+                'last_date': None,
+            })
+
+        rows.sort(key=lambda r: r['plate'] or '')
+
+        fleet_avg_consumption = (
+            round(grand_distance / float(grand_liters), 3) if grand_liters > 0 else None
+        )
+
+        return Response({
+            'rows': rows,
+            'meta': {
+                'total': len(rows),
+                'aggregates': {
+                    'total_distance_km': grand_distance,
+                    'total_liters_diesel': str(grand_liters),
+                    'fleet_avg_consumption': fleet_avg_consumption,
                 },
             },
         })

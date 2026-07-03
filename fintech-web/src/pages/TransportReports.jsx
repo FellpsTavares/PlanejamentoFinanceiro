@@ -11,7 +11,19 @@ const REPORT_TYPES = [
   { key: 'driver_payments', label: 'Pagamentos ao Motorista' },
   { key: 'by_vehicle', label: 'Resumo por Veículo' },
   { key: 'summary', label: 'Resumo por Categoria' },
+  { key: 'fuel_consumption', label: 'Consumo de Combustível' },
 ];
+
+// Nome (em português) usado no arquivo exportado — `key` continua em inglês
+// porque é o valor aceito pela API (`report_type`), só o nome do arquivo muda.
+const REPORT_TYPE_FILE_NAMES = {
+  movements: 'lancamentos',
+  trips: 'viagens_detalhadas',
+  driver_payments: 'pagamentos_motorista',
+  by_vehicle: 'resumo_por_veiculo',
+  summary: 'resumo_por_categoria',
+  fuel_consumption: 'consumo_combustivel',
+};
 
 const COLUMNS = {
   movements: [
@@ -58,6 +70,17 @@ const COLUMNS = {
     { key: 'count', label: 'Lançamentos', align: 'right' },
     { key: 'total', label: 'Total (R$)', align: 'right', currency: true },
   ],
+  fuel_consumption: [
+    { key: 'plate', label: 'Placa' },
+    { key: 'model', label: 'Modelo' },
+    { key: 'refuel_count', label: 'Abastecimentos', align: 'right' },
+    { key: 'total_liters_diesel', label: 'Litros Diesel', align: 'right', unit: 'L' },
+    { key: 'total_liters_arla', label: 'Litros Arla', align: 'right', unit: 'L' },
+    { key: 'distance_km', label: 'KM Percorrido', align: 'right', unit: 'km' },
+    { key: 'avg_consumption', label: 'Consumo Médio', align: 'right', unit: 'km/l' },
+    { key: 'first_date', label: 'Primeiro Abastecimento' },
+    { key: 'last_date', label: 'Último Abastecimento' },
+  ],
 };
 
 const ORDER_BY_OPTIONS = {
@@ -80,6 +103,7 @@ const ORDER_BY_OPTIONS = {
   ],
   by_vehicle: [],
   summary: [],
+  fuel_consumption: [],
 };
 
 // ─── Tradução dos rótulos dos agregados ───────────────────────────────────────
@@ -96,12 +120,32 @@ const AGGREGATE_LABELS = {
   grand_expense_value: 'Despesas Total',
   grand_net_value: 'Líquido Total',
   grand_total: 'Total Geral',
+  total_distance_km: 'Distância Percorrida',
+  total_liters_diesel: 'Litros de Diesel',
+  fleet_avg_consumption: 'Consumo Médio da Frota',
+};
+
+// Aggregates que não são valores monetários — indica a unidade para formatação correta
+const AGGREGATE_UNITS = {
+  total_distance_km: 'km',
+  total_liters_diesel: 'L',
+  fleet_avg_consumption: 'km/l',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatBRL = (value) =>
   Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const formatUnit = (value, unit) => {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  if (unit === 'km/l') return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} km/l`;
+  if (unit === 'km') return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} km`;
+  if (unit === 'L') return `${n.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} L`;
+  return n.toLocaleString('pt-BR');
+};
 
 const formatDate = (val) => {
   if (!val) return '—';
@@ -113,6 +157,28 @@ const formatDate = (val) => {
 const MOVEMENT_TYPE_COLORS = {
   expense: 'text-red-700',
   revenue: 'text-green-700',
+};
+
+// ─── Ícones dos cards de KPI (relatório de Consumo de Combustível) ────────────
+
+const FUEL_STAT_ICONS = {
+  distance: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+    </svg>
+  ),
+  fuel: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 20V6a2 2 0 012-2h6a2 2 0 012 2v14M4 20h10m-10 0H2m12 0h2m4-11l2.2 2.2a1 1 0 01.3.7V17a1.5 1.5 0 01-3 0v-3a1 1 0 00-1-1h-.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6h6v5H6z" />
+    </svg>
+  ),
+  gauge: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.5 19a8 8 0 1115 0M12 12l3-3" />
+    </svg>
+  ),
 };
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -202,7 +268,7 @@ export default function TransportReports() {
     try {
       await reportsService.downloadTransportReportCsv(
         buildParams(),
-        `relatorio_transporte_${reportType}_${new Date().toISOString().slice(0, 10)}.csv`
+        `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.csv`
       );
       toast('CSV exportado com sucesso.', 'success');
     } catch (err) {
@@ -219,7 +285,7 @@ export default function TransportReports() {
     try {
       await reportsService.downloadTransportReportPdf(
         buildParams(),
-        `relatorio_transporte_${reportType}_${new Date().toISOString().slice(0, 10)}.pdf`
+        `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.pdf`
       );
       toast('PDF exportado com sucesso.', 'success');
     } catch (err) {
@@ -234,7 +300,7 @@ export default function TransportReports() {
   const showCategoryFilter = reportType === 'movements' || reportType === 'summary';
   const showStatusFilter = reportType === 'trips' || reportType === 'driver_payments';
   const showModalityFilter = reportType === 'trips';
-  const showVehicleFilter = ['movements', 'trips', 'driver_payments', 'summary'].includes(reportType);
+  const showVehicleFilter = ['movements', 'trips', 'driver_payments', 'summary', 'fuel_consumption'].includes(reportType);
   const showOrderBy = orderOptions.length > 0;
 
   return (
@@ -434,7 +500,31 @@ export default function TransportReports() {
       </div>
 
       {/* Agregados */}
-      {searched && meta?.aggregates && (
+      {searched && meta?.aggregates && reportType === 'fuel_consumption' && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          {[
+            { key: 'total_distance_km', icon: FUEL_STAT_ICONS.distance },
+            { key: 'total_liters_diesel', icon: FUEL_STAT_ICONS.fuel },
+            { key: 'fleet_avg_consumption', icon: FUEL_STAT_ICONS.gauge },
+          ].map(({ key, icon }) => {
+            const val = meta.aggregates[key];
+            const label = AGGREGATE_LABELS[key] || key;
+            return (
+              <div key={key} className="flex items-center gap-3 p-4 bg-white border rounded-xl shadow-sm">
+                <div className="shrink-0 h-10 w-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  {icon}
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">{label}</div>
+                  <div className="text-lg font-semibold text-gray-900">{formatUnit(val, AGGREGATE_UNITS[key])}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {searched && meta?.aggregates && reportType !== 'fuel_consumption' && (
         <div className="flex flex-wrap gap-3 mb-4">
           {Object.entries(meta.aggregates).map(([key, val]) => {
             const label = AGGREGATE_LABELS[key] || key.replace(/_/g, ' ').replace(/\b(\w)/g, (c) => c.toUpperCase());
@@ -489,7 +579,9 @@ export default function TransportReports() {
                             // Colorir valores negativos
                             const num = Number(row[col.key]);
                             if (num < 0) className += ' text-red-600';
-                          } else if (col.key === 'date' || col.key === 'start_date' || col.key === 'end_date') {
+                          } else if (col.unit) {
+                            value = formatUnit(value, col.unit);
+                          } else if (['date', 'start_date', 'end_date', 'first_date', 'last_date'].includes(col.key)) {
                             value = formatDate(value);
                           } else if (col.key === 'movement_type_label') {
                             const typeClass = MOVEMENT_TYPE_COLORS[row.movement_type] || '';

@@ -1,5 +1,16 @@
 import api from './api';
 
+// Nome (em português) usado no arquivo exportado quando a tela não informa um
+// nome explícito — `report_type` continua em inglês, é o valor aceito pela API.
+const TRANSPORT_REPORT_TYPE_FILE_NAMES = {
+  movements: 'lancamentos',
+  trips: 'viagens_detalhadas',
+  driver_payments: 'pagamentos_motorista',
+  by_vehicle: 'resumo_por_veiculo',
+  summary: 'resumo_por_categoria',
+  fuel_consumption: 'consumo_combustivel',
+};
+
 const downloadPdf = async (url, filename, params = {}) => {
   const response = await api.get(url, { responseType: 'blob', params });
   const blob = new Blob([response.data], { type: 'application/pdf' });
@@ -35,7 +46,7 @@ export const reportsService = {
   // Exportação PDF dos relatórios de Transportadora
   downloadTransportReportPdf: async (params = {}, filename) => {
     const reportType = params.report_type || 'relatorio';
-    const resolvedFilename = filename || `relatorio_transporte_${reportType}.pdf`;
+    const resolvedFilename = filename || `relatorio_transporte_${TRANSPORT_REPORT_TYPE_FILE_NAMES[reportType] || reportType}.pdf`;
     // Chamar rota dedicada /transport/reports/pdf/ para evitar problemas de proxy
     return downloadPdf('/transport/reports/pdf/', resolvedFilename, { ...params });
   },
