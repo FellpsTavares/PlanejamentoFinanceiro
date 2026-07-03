@@ -77,8 +77,12 @@ class FuelLogSerializer(serializers.ModelSerializer):
     def validate(self, data):
         vehicle = data.get('vehicle', getattr(self.instance, 'vehicle', None))
         odometer_km = data.get('odometer_km', getattr(self.instance, 'odometer_km', None))
-        if vehicle and odometer_km is not None:
-            last_log = FuelLog.objects.filter(vehicle=vehicle).exclude(pk=getattr(self.instance, 'pk', None)).order_by('-date', '-id').first()
+        # Só valida regressão de km ao CRIAR um abastecimento novo. Ao editar um já
+        # existente o usuário normalmente está corrigindo um valor lançado errado (ex:
+        # digitou km de um registro antigo, não o mais recente do veículo) — bloquear
+        # a edição nesse caso impede a própria correção do erro.
+        if self.instance is None and vehicle and odometer_km is not None:
+            last_log = FuelLog.objects.filter(vehicle=vehicle).order_by('-date', '-id').first()
             if last_log and odometer_km < last_log.odometer_km:
                 raise serializers.ValidationError({
                     'odometer_km': f'Quilometragem não pode ser menor que a do último abastecimento registrado ({last_log.odometer_km} km).'
