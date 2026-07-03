@@ -25,7 +25,7 @@ export default function TransportTripNew() {
   const [ratePerTon, setRatePerTon] = useState('');
   const [days, setDays] = useState('');
   const [dailyRate, setDailyRate] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
   const [progressType, setProgressType] = useState('');
@@ -78,7 +78,7 @@ export default function TransportTripNew() {
         if (tripId) {
           const trip = await transportService.getTrip(tripId);
           setVehicleId(String(trip.vehicle || ''));
-          setStartDate(trip.start_date || trip.date || new Date().toISOString().slice(0, 10));
+          setStartDate(trip.start_date || trip.date || '');
           setEndDate(trip.end_date || '');
           setProgressType(trip.progress_type || '');
           setModality(trip.modality || 'per_ton');
@@ -176,6 +176,10 @@ export default function TransportTripNew() {
     e.preventDefault();
     if (!vehicleId) {
       toast('Selecione um veículo', 'error');
+      return;
+    }
+    if (!startDate) {
+      toast('Informe a data de início da viagem', 'error');
       return;
     }
     const payload = {
@@ -347,8 +351,8 @@ export default function TransportTripNew() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium">Data início</label>
-            <input type="date" className="input-field" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            <label className="block text-sm font-medium">Data início *</label>
+            <input type="date" className="input-field" value={startDate} onChange={e => setStartDate(e.target.value)} required />
           </div>
           <div>
             <label className="block text-sm font-medium">Data fim</label>
