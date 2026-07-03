@@ -12,7 +12,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
   const [ratePerTon, setRatePerTon] = useState('');
   const [days, setDays] = useState('');
   const [dailyRate, setDailyRate] = useState('');
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
   const [progressType, setProgressType] = useState('');
@@ -61,7 +61,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         setRatePerTon(initial.rate_per_ton != null ? String(initial.rate_per_ton) : '');
         setDays(initial.days != null ? String(initial.days) : '');
         setDailyRate(initial.daily_rate != null ? String(initial.daily_rate) : '');
-        setStartDate(initial.start_date || initial.date || new Date().toISOString().slice(0, 10));
+        setStartDate(initial.start_date || initial.date || '');
         setEndDate(initial.end_date || '');
         setProgressType(initial.progress_type || '');
         setDescription(initial.description || '');
@@ -77,7 +77,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         setRatePerTon('');
         setDays('');
         setDailyRate('');
-        setStartDate(new Date().toISOString().slice(0, 10));
+        setStartDate('');
         setEndDate('');
         setProgressType('');
         setDescription('');

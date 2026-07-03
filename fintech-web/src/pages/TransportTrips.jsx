@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -17,7 +17,7 @@ export default function TransportTrips() {
   const [tripMovements, setTripMovements] = useState([]);
   const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
 
-  const [movementDate, setMovementDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [movementDate, setMovementDate] = useState('');
   const [movementType, setMovementType] = useState('expense');
   const [movementExpenseCategory, setMovementExpenseCategory] = useState('fuel');
   const [movementAmount, setMovementAmount] = useState('');
@@ -185,23 +185,33 @@ export default function TransportTrips() {
     return (vehicles || []).map((v) => v.plate || v.registration || v.name || String(v.id));
   }, [vehicles]);
 
+  // Mantém a última lista de viagens acessível sem forçar o efeito abaixo a
+  // re-rodar toda vez que `trips`/`selectedTrip` mudam de referência (ex: após
+  // adicionar/editar/excluir um lançamento). Sem isso, qualquer refresh da lista
+  // reaplicava os valores salvos no servidor por cima de edições locais ainda
+  // não salvas (ex: o toggle "já recebido" voltava a desmarcar sozinho).
+  const tripsRef = useRef(trips);
+  useEffect(() => { tripsRef.current = trips; }, [trips]);
+
   useEffect(() => {
-    if (!selectedTrip) return;
-    setStartDate(selectedTrip.start_date || selectedTrip.date || '');
-    setEndDate(selectedTrip.end_date || '');
-    setProgressType(selectedTrip.progress_type || progressTypeOptions[0] || '');
-    setInitialKm(selectedTrip.initial_km != null ? String(selectedTrip.initial_km) : '');
-    setFinalKm(selectedTrip.final_km != null ? String(selectedTrip.final_km) : '');
-    setDescription(selectedTrip.description || '');
-    setIsReceived(Boolean(selectedTrip.is_received));
-    setMovementDate(new Date().toISOString().slice(0, 10));
+    const trip = tripsRef.current.find((t) => String(t.id) === String(selectedTripId));
+    if (!trip) return;
+    setStartDate(trip.start_date || trip.date || '');
+    setEndDate(trip.end_date || '');
+    setProgressType(trip.progress_type || progressTypeOptions[0] || '');
+    setInitialKm(trip.initial_km != null ? String(trip.initial_km) : '');
+    setFinalKm(trip.final_km != null ? String(trip.final_km) : '');
+    setDescription(trip.description || '');
+    setIsReceived(Boolean(trip.is_received));
+    setMovementDate(trip.start_date || trip.date || '');
     setMovementType('expense');
     setMovementExpenseCategory('fuel');
     setMovementAmount('');
     setMovementDescription('');
     setEditingMovementId('');
-    loadTripMovements(selectedTrip.id);
-  }, [selectedTripId, selectedTrip, progressTypeOptions]);
+    loadTripMovements(trip.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTripId, progressTypeOptions]);
 
   const inProgressTrips = trips.filter((trip) => trip.status === 'in_progress');
   const completedTrips = trips.filter((trip) => trip.status === 'completed');
@@ -306,7 +316,7 @@ export default function TransportTrips() {
 
       setMovementAmount('');
       setMovementDescription('');
-      setMovementDate(new Date().toISOString().slice(0, 10));
+      setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
       setMovementType('expense');
       setMovementExpenseCategory('fuel');
       setEditingMovementId('');
@@ -340,7 +350,7 @@ export default function TransportTrips() {
       toast('Lançamento excluído', 'success');
       if (String(editingMovementId) === String(movement.id)) {
         setEditingMovementId('');
-        setMovementDate(new Date().toISOString().slice(0, 10));
+        setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
         setMovementType('expense');
         setMovementExpenseCategory('fuel');
         setMovementAmount('');
