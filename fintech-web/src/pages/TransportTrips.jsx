@@ -5,6 +5,7 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import CurrencyInput from '../components/CurrencyInput';
+import { formatDecimalString } from '../utils/format';
 
 export default function TransportTrips() {
   const navigate = useNavigate();
@@ -336,7 +337,9 @@ export default function TransportTrips() {
     setMovementDate(movement.date);
     setMovementType(movement.movement_type);
     setMovementExpenseCategory(movement.expense_category || 'fuel');
-    setMovementAmount(String(movement.amount));
+    // CurrencyInput (Cleave) espera vírgula decimal/ponto de milhar (formato BR);
+    // a API retorna o valor com ponto decimal cru.
+    setMovementAmount(movement.amount != null ? formatDecimalString(movement.amount, 2) : '');
     setMovementDescription(movement.description || '');
   };
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
-import { formatDecimalStringToBRL, normalizeInputDecimal, formatQuantityDisplay } from '../utils/format';
+import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal, formatQuantityDisplay } from '../utils/format';
 
 export default function TransportTripModal({ open, onClose, vehicleId, initial, onSaved }) {
   const navigate = useNavigate();
@@ -56,21 +56,25 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
       }
 
       if (initial) {
+        // Campos monetários/decimais abaixo são parseados via parseMoney (formato BR,
+        // vírgula decimal) na exibição de preview e no submit — a API retorna ponto
+        // decimal cru, então precisam ser convertidos para BR antes de entrar no estado,
+        // senão o parseMoney reinterpreta o ponto como separador de milhar (bug 100x).
         setModality(initial.modality || 'per_ton');
         setTons(initial.tons != null ? formatQuantityDisplay(initial.tons) : '');
-        setRatePerTon(initial.rate_per_ton != null ? String(initial.rate_per_ton) : '');
+        setRatePerTon(initial.rate_per_ton != null ? formatDecimalString(initial.rate_per_ton, 2) : '');
         setDays(initial.days != null ? String(initial.days) : '');
-        setDailyRate(initial.daily_rate != null ? String(initial.daily_rate) : '');
+        setDailyRate(initial.daily_rate != null ? formatDecimalString(initial.daily_rate, 2) : '');
         setStartDate(initial.start_date || initial.date || '');
         setEndDate(initial.end_date || '');
         setProgressType(initial.progress_type || '');
         setDescription(initial.description || '');
         setIsReceived(Boolean(initial.is_received));
-        setBaseExpenseValue(initial.base_expense_value != null ? String(initial.base_expense_value) : '0');
-        setFuelExpenseValue(initial.fuel_expense_value != null ? String(initial.fuel_expense_value) : '0');
+        setBaseExpenseValue(initial.base_expense_value != null ? formatDecimalString(initial.base_expense_value, 2) : '0');
+        setFuelExpenseValue(initial.fuel_expense_value != null ? formatDecimalString(initial.fuel_expense_value, 2) : '0');
         setInitialKm(initial.initial_km != null ? String(initial.initial_km) : '');
         setFinalKm(initial.final_km != null ? String(initial.final_km) : '');
-        setDriverPayment(initial.driver_payment != null ? String(initial.driver_payment) : '0');
+        setDriverPayment(initial.driver_payment != null ? formatDecimalString(initial.driver_payment, 2) : '0');
       } else {
         setModality('per_ton');
         setTons('');
