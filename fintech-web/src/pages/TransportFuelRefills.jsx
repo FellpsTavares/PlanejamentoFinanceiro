@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { transportService } from '../services/transport';
 import { toast, extractApiError } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -37,9 +37,12 @@ export default function TransportFuelRefills() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const load = async () => {
-    setLoading(true);
+    // Só mostra o overlay de página inteira no primeiro carregamento — refresh
+    // por filtro ou após salvar/excluir não deve sumir com a tela.
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const params = {};
       if (filterVehicle) params.vehicle = filterVehicle;
@@ -54,6 +57,7 @@ export default function TransportFuelRefills() {
       toast('Erro ao carregar abastecimentos', 'error');
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
     }
   };
 
