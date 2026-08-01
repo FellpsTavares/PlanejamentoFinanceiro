@@ -3,9 +3,21 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
-import { toast } from '../utils/toast';
+import { toast, extractApiError } from '../utils/toast';
 import CurrencyInput from '../components/CurrencyInput';
-import { formatDecimalString } from '../utils/format';
+import { formatDecimalString, formatQuantityDisplay, normalizeInputDecimal } from '../utils/format';
+import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
+
+const EMPTY_FUEL_FORM = {
+  date: '',
+  fuel_type: 'diesel',
+  odometer_km: '',
+  liters: '',
+  price_per_liter: '',
+  discount: '',
+  paid_value: '',
+  autoCalcPaidValue: true,
+};
 
 export default function TransportTrips() {
   const navigate = useNavigate();
@@ -24,6 +36,9 @@ export default function TransportTrips() {
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
   const [editingMovementId, setEditingMovementId] = useState('');
+  const [movementTab, setMovementTab] = useState('manual'); // 'manual' | 'fuel'
+  const [fuelForm, setFuelForm] = useState(EMPTY_FUEL_FORM);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -210,6 +225,8 @@ export default function TransportTrips() {
     setMovementAmount('');
     setMovementDescription('');
     setEditingMovementId('');
+    setMovementTab('manual');
+    setFuelForm({ ...EMPTY_FUEL_FORM, date: trip.start_date || trip.date || '' });
     loadTripMovements(trip.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTripId, progressTypeOptions]);
@@ -332,6 +349,71 @@ export default function TransportTrips() {
     }
   };
 
+  const fuelPreviewPaidValue = (() => {
+    if (!fuelForm.autoCalcPaidValue) return fuelForm.paid_value;
+    const gross = multiplyDecimalStrings(fuelForm.liters || '0', fuelForm.price_per_liter || '0');
+    const net = subtractDecimalStrings(gross, fuelForm.discount || '0');
+    // CurrencyInput (Cleave) espera formato BR (vírgula); as funções de decimal.js
+    // retornam ponto decimal cru.
+    return formatDecimalString(net, 2);
+  })();
+
+  // Registra o abastecimento (histórico do veículo, conta pra média de consumo) e já
+  // lança o valor pago como despesa de combustível nesta viagem — um envio só, dois
+  // registros independentes (editar o abastecimento depois não altera a despesa já
+  // lançada, e vice-versa).
+  const handleAddFuelMovement = async (e) => {
+    e.preventDefault();
+    if (!selectedTrip) return;
+    if (!fuelForm.date) { toast('Informe a data do abastecimento', 'error'); return; }
+    if (!fuelForm.liters) { toast('Informe a quantidade de litros', 'error'); return; }
+    if (!fuelForm.odometer_km) { toast('Informe a quilometragem atual', 'error'); return; }
+
+    try {
+      setSaving(true);
+      const liters = normalizeInputDecimal(fuelForm.liters || '0');
+      const pricePerLiter = normalizeInputDecimal(fuelForm.price_per_liter || '0');
+      const discount = normalizeInputDecimal(fuelForm.discount || '0');
+
+      const fuelPayload = {
+        vehicle: selectedTrip.vehicle_id || selectedTrip.vehicle,
+        date: fuelForm.date,
+        fuel_type: fuelForm.fuel_type,
+        odometer_km: Number(fuelForm.odometer_km || 0),
+        liters,
+        price_per_liter: pricePerLiter || null,
+        discount,
+      };
+      if (!fuelForm.autoCalcPaidValue) {
+        fuelPayload.paid_value = normalizeInputDecimal(fuelForm.paid_value || '0');
+      }
+
+      const createdFuelLog = await transportService.createFuelLog(fuelPayload);
+      const expenseAmount = createdFuelLog.paid_value != null
+        ? Number(createdFuelLog.paid_value)
+        : Number(subtractDecimalStrings(multiplyDecimalStrings(liters, pricePerLiter), discount));
+
+      await transportService.createTripMovement(selectedTrip.id, {
+        date: fuelForm.date,
+        movement_type: 'expense',
+        expense_category: 'fuel',
+        amount: expenseAmount,
+        description: `Abastecimento (${fuelForm.fuel_type === 'diesel' ? 'Diesel' : 'Arla'}) — ${formatQuantityDisplay(liters)} L`,
+      });
+
+      toast('Abastecimento registrado e despesa lançada na viagem', 'success');
+      setFuelForm({ ...EMPTY_FUEL_FORM, date: selectedTrip.start_date || selectedTrip.date || '' });
+      await loadTripMovements(selectedTrip.id);
+      const refreshedTrip = await transportService.getTrip(selectedTrip.id);
+      setTrips((prev) => prev.map((item) => (String(item.id) === String(refreshedTrip.id) ? refreshedTrip : item)));
+    } catch (err) {
+      console.error('Erro ao registrar abastecimento', err);
+      toast(extractApiError(err, 'Erro ao registrar abastecimento'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleEditMovement = (movement) => {
     setEditingMovementId(String(movement.id));
     setMovementDate(movement.date);
@@ -386,9 +468,32 @@ export default function TransportTrips() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-4 border rounded lg:col-span-1 relative z-20">
-          {/* Filters panel above the lists */}
+          {/* Busca sempre visível + filtros recolhidos atrás de um botão, para não ocupar
+              espaço vertical acima da lista de viagens quando não estão em uso. */}
           <div className="mb-4">
-              <div className="p-3 bg-white rounded shadow-sm">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                aria-label="Buscar por placa"
+                placeholder="Buscar por placa..."
+                className="input input-sm flex-1"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button
+                type="button"
+                className={`h-9 px-3 rounded-md border flex items-center gap-1.5 text-sm font-medium ${filtersOpen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
+                onClick={() => setFiltersOpen((o) => !o)}
+              >
+                Filtros
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            {filtersOpen && (
+              <div className="mt-2 p-3 bg-white border rounded shadow-sm">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col sm:flex-row sm:items-end sm:gap-3">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 w-full">
@@ -493,6 +598,7 @@ export default function TransportTrips() {
                   </div>
                 </div>
               </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -644,58 +750,151 @@ export default function TransportTrips() {
 
               <div className="border rounded p-3 space-y-3">
                 <h3 className="font-semibold">Lançar movimentação da viagem</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium">Data</label>
-                    <input type="date" className="input-field w-full" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium">Tipo</label>
-                    <select className="input-field w-full" value={movementType} onChange={(e) => setMovementType(e.target.value)} disabled={selectedTrip.status !== 'in_progress'}>
-                      <option value="expense">Gasto</option>
-                      <option value="revenue">Recebimento</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium">Categoria</label>
-                    <select className="input-field w-full" value={movementExpenseCategory} onChange={(e) => setMovementExpenseCategory(e.target.value)} disabled={selectedTrip.status !== 'in_progress' || movementType !== 'expense'}>
-                      <option value="fuel">Combustível</option>
-                      <option value="other">Outros gastos</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium">Valor (R$)</label>
-                    <CurrencyInput className="input-field w-full" value={movementAmount} onChange={(e) => setMovementAmount(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium">Descrição do gasto/recebimento</label>
-                  <input className="input-field w-full" value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} placeholder="Opcional para combustível. Obrigatória para os demais." />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="btn btn-secondary" onClick={handleAddMovement} disabled={saving || selectedTrip.status !== 'in_progress'}>
-                    {editingMovementId ? 'Salvar edição do lançamento' : 'Adicionar lançamento'}
-                  </button>
-                  {editingMovementId && (
+                {selectedTrip.status === 'in_progress' && (
+                  <div className="inline-flex border rounded-md p-0.5 bg-gray-50">
                     <button
                       type="button"
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        setEditingMovementId('');
-                        setMovementDate(new Date().toISOString().slice(0, 10));
-                        setMovementType('expense');
-                        setMovementExpenseCategory('fuel');
-                        setMovementAmount('');
-                        setMovementDescription('');
-                      }}
-                      disabled={saving || selectedTrip.status !== 'in_progress'}
+                      onClick={() => setMovementTab('manual')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded ${movementTab === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
                     >
-                      Cancelar edição
+                      Gasto / Receita
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setMovementTab('fuel')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded ${movementTab === 'fuel' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                    >
+                      ⛽ Abastecimento
+                    </button>
+                  </div>
+                )}
+
+                {(movementTab === 'manual' || selectedTrip.status !== 'in_progress') && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium">Data</label>
+                        <input type="date" className="input-field w-full" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Tipo</label>
+                        <select className="input-field w-full" value={movementType} onChange={(e) => setMovementType(e.target.value)} disabled={selectedTrip.status !== 'in_progress'}>
+                          <option value="expense">Gasto</option>
+                          <option value="revenue">Recebimento</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Categoria</label>
+                        <select className="input-field w-full" value={movementExpenseCategory} onChange={(e) => setMovementExpenseCategory(e.target.value)} disabled={selectedTrip.status !== 'in_progress' || movementType !== 'expense'}>
+                          <option value="fuel">Combustível</option>
+                          <option value="other">Outros gastos</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Valor (R$)</label>
+                        <CurrencyInput className="input-field w-full" value={movementAmount} onChange={(e) => setMovementAmount(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium">Descrição do gasto/recebimento</label>
+                      <input className="input-field w-full" value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} placeholder="Opcional para combustível. Obrigatória para os demais." />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-secondary" onClick={handleAddMovement} disabled={saving || selectedTrip.status !== 'in_progress'}>
+                        {editingMovementId ? 'Salvar edição do lançamento' : 'Adicionar lançamento'}
+                      </button>
+                      {editingMovementId && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setEditingMovementId('');
+                            setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
+                            setMovementType('expense');
+                            setMovementExpenseCategory('fuel');
+                            setMovementAmount('');
+                            setMovementDescription('');
+                          }}
+                          disabled={saving || selectedTrip.status !== 'in_progress'}
+                        >
+                          Cancelar edição
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {movementTab === 'fuel' && selectedTrip.status === 'in_progress' && (
+                  <form onSubmit={handleAddFuelMovement} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium">Data</label>
+                        <input type="date" className="input-field w-full" value={fuelForm.date} onChange={(e) => setFuelForm((p) => ({ ...p, date: e.target.value }))} required />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Tipo de combustível</label>
+                        <select className="input-field w-full" value={fuelForm.fuel_type} onChange={(e) => setFuelForm((p) => ({ ...p, fuel_type: e.target.value }))}>
+                          <option value="diesel">Diesel</option>
+                          <option value="arla">Arla</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Litros</label>
+                        <input className="input-field w-full" inputMode="decimal" pattern="[0-9]+([\.,][0-9]+)?" step="0.001" value={fuelForm.liters} onChange={(e) => setFuelForm((p) => ({ ...p, liters: e.target.value }))} required />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">KM atual</label>
+                        <input type="number" min="0" className="input-field w-full" value={fuelForm.odometer_km} onChange={(e) => setFuelForm((p) => ({ ...p, odometer_km: e.target.value }))} required />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium">Valor por litro</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                          <CurrencyInput className="input-field w-full" style={{ paddingLeft: '2.75rem' }} value={fuelForm.price_per_liter} onChange={(e) => setFuelForm((p) => ({ ...p, price_per_liter: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Desconto</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                          <CurrencyInput className="input-field w-full" style={{ paddingLeft: '2.75rem' }} value={fuelForm.discount} onChange={(e) => setFuelForm((p) => ({ ...p, discount: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">Valor pago</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                          <CurrencyInput
+                            className="input-field w-full"
+                            style={{ paddingLeft: '2.75rem' }}
+                            value={fuelPreviewPaidValue}
+                            disabled={fuelForm.autoCalcPaidValue}
+                            onChange={(e) => setFuelForm((p) => ({ ...p, paid_value: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <label className="text-sm flex items-center gap-2">
+                      <input type="checkbox" checked={fuelForm.autoCalcPaidValue} onChange={(e) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: e.target.checked }))} />
+                      Calcular valor pago automaticamente (litros × valor/litro − desconto)
+                    </label>
+
+                    <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
+                      ✓ Isso registra o abastecimento no histórico do veículo (conta pra média de consumo) e já lança o valor pago como despesa "Combustível" nesta viagem.
+                    </p>
+
+                    <button type="submit" className="btn btn-secondary" disabled={saving}>
+                      {saving ? 'Registrando...' : 'Registrar abastecimento e lançar despesa'}
+                    </button>
+                  </form>
+                )}
 
                 <div className="space-y-2 max-h-52 overflow-y-auto">
                   {tripMovements.length === 0 ? (
