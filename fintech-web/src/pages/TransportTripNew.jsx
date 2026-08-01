@@ -6,7 +6,7 @@ import { tenantParametersService } from '../services/tenantParameters';
 import { toast } from '../utils/toast';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal, formatQuantityDisplay } from '../utils/format';
-import { multiplyDecimalStrings, addDecimalStrings, subtractDecimalStrings, divideDecimalStringByInt } from '../utils/decimal';
+import { multiplyDecimalStrings, subtractDecimalStrings, divideDecimalStringByInt } from '../utils/decimal';
 import CurrencyInput from '../components/CurrencyInput';
 
 export default function TransportTripNew() {
@@ -30,12 +30,7 @@ export default function TransportTripNew() {
   const [progressTypeOptions, setProgressTypeOptions] = useState(['Coleta', 'Em trânsito', 'Descarga', 'Retorno']);
   const [progressType, setProgressType] = useState('');
   const [description, setDescription] = useState('');
-  const [isReceived, setIsReceived] = useState(false);
-  const [baseExpenseValue, setBaseExpenseValue] = useState('0');
-  const [fuelExpenseValue, setFuelExpenseValue] = useState('0');
-  const [fuelLiters, setFuelLiters] = useState('');
-  const [initialKm, setInitialKm] = useState('');
-  const [finalKm, setFinalKm] = useState('');
+  const [isReceived, setIsReceived] = useState(true);
   const [driverPayment, setDriverPayment] = useState('0');
   const [driverReceiveType, setDriverReceiveType] = useState('1');
   const [driverPct, setDriverPct] = useState('10');
@@ -88,14 +83,9 @@ export default function TransportTripNew() {
           setDailyRate(trip.daily_rate != null ? formatDecimalString(trip.daily_rate, 2) : '');
           setDescription(trip.description || '');
           setIsReceived(Boolean(trip.is_received));
-          setBaseExpenseValue(trip.base_expense_value != null ? formatDecimalString(trip.base_expense_value, 2) : '0,00');
-          setFuelExpenseValue(trip.fuel_expense_value != null ? formatDecimalString(trip.fuel_expense_value, 2) : '0,00');
-          setInitialKm(trip.initial_km != null ? String(trip.initial_km) : '');
-          setFinalKm(trip.final_km != null ? String(trip.final_km) : '');
           setDriverPayment(trip.driver_payment != null ? formatDecimalString(trip.driver_payment, 2) : '0,00');
           setDriverIsOwner(Boolean(trip.driver_is_owner));
           setDriverId(trip.driver != null ? String(trip.driver) : '');
-          setFuelLiters(trip.fuel_liters != null ? formatQuantityDisplay(trip.fuel_liters) : '');
           setPreviewRaw(trip.total_value != null ? String(trip.total_value) : null);
           setPreview(Number(trip.total_value || 0));
         }
@@ -151,25 +141,18 @@ export default function TransportTripNew() {
 
   // Use decimal string arithmetic for previews to avoid rounding
   const grossTotalStr = preview ? String(preview) : '0';
-  const baseExpenseStr = normalizeInputDecimal(baseExpenseValue || '0');
-  const fuelExpenseStr = normalizeInputDecimal(fuelExpenseValue || '0');
   const manualDriverStr = normalizeInputDecimal(driverPayment || '0');
 
   // driver pct calculation: (base * pct) / 100
+  // Gastos da viagem (combustível, outras despesas) não são mais lançados aqui — são
+  // registrados via movimentações em "Gerenciar Viagens", então a base "líquida" usa o
+  // total bruto da viagem.
   const pct = normalizeInputDecimal(driverPct || '0');
-  const calcBaseStr = driverPctType === 'liquida'
-    ? (() => {
-      const diff = subtractDecimalStrings(grossTotalStr, addDecimalStrings(baseExpenseStr, fuelExpenseStr));
-      // if negative, use 0
-      if (diff.startsWith('-')) return '0';
-      return diff;
-    })()
-    : grossTotalStr;
-  const pctMul = multiplyDecimalStrings(calcBaseStr, pct);
+  const pctMul = multiplyDecimalStrings(grossTotalStr, pct);
   const pctDriverStr = divideDecimalStringByInt(pctMul, 100);
   // Proprietário não gera pagamento de motorista
   const driverPaymentPreviewStr = driverIsOwner ? '0' : (driverReceiveType === '1' ? manualDriverStr : pctDriverStr);
-  const totalExpensePreviewStr = addDecimalStrings(addDecimalStrings(baseExpenseStr, fuelExpenseStr), driverPaymentPreviewStr);
+  const totalExpensePreviewStr = driverPaymentPreviewStr;
   const netPreviewStr = subtractDecimalStrings(grossTotalStr, totalExpensePreviewStr);
 
   const handleSubmit = async (e) => {
@@ -191,13 +174,8 @@ export default function TransportTripNew() {
       progress_type: progressType,
       description,
       is_received: isReceived,
-      base_expense_value: parseMoney(baseExpenseValue || 0),
-      fuel_expense_value: parseMoney(fuelExpenseValue || 0),
-      fuel_liters: fuelLiters ? normalizeInputDecimal(fuelLiters) : null,
       driver_is_owner: driverIsOwner,
       driver: driverId ? parseInt(driverId, 10) : null,
-      initial_km: initialKm === '' ? null : Number(initialKm),
-      final_km: finalKm === '' ? null : Number(finalKm),
     };
     if (driverIsOwner) {
       payload.driver_payment = 0;
@@ -372,61 +350,6 @@ export default function TransportTripNew() {
         <div>
           <label className="block text-sm font-medium">Descrição</label>
           <textarea className="input-field w-full" value={description} onChange={e => setDescription(e.target.value)} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Outros gastos da Viagem</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={baseExpenseValue} onChange={e => setBaseExpenseValue(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium">Litros abastecidos</label>
-                <input
-                  className="input-field w-full"
-                  inputMode="decimal"
-                  pattern="[0-9]+([\.,][0-9]+)?"
-                  step="0.001"
-                  value={fuelLiters}
-                  onChange={e => setFuelLiters(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Consumo (km por litro) — previsto</label>
-                <div className="input-field w-full py-2">{(() => {
-                  const ik = Number(initialKm || 0);
-                  const fk = Number(finalKm || 0);
-                  const liters = Number(String(fuelLiters || '0').replace(',', '.'));
-                  if (ik && fk && liters > 0 && fk >= ik) {
-                    const dist = fk - ik;
-                    return (dist / liters).toFixed(3);
-                  }
-                  return '—';
-                })()}</div>
-              </div>
-            </div>
-
-            <label className="block text-sm font-medium">Gasto de Combustível</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
-              <CurrencyInput className="input-field w-full" style={{ paddingLeft: '3rem' }} value={fuelExpenseValue} onChange={e => setFuelExpenseValue(e.target.value)} />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Quilometragem inicial</label>
-              <input className="input-field w-full" value={initialKm} onChange={e => setInitialKm(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Quilometragem final</label>
-            <input className="input-field w-full" value={finalKm} onChange={e => setFinalKm(e.target.value)} />
-          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
