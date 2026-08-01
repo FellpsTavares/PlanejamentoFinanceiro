@@ -7,6 +7,7 @@ import { tenantAuditService } from '../services/tenantAudit';
 import { transportService } from '../services/transport';
 import api from '../services/api';
 import { toast } from '../utils/toast';
+import ConfirmModal from '../components/ConfirmModal';
 
 const MODULE_LABELS = {
   general: 'Geral',
@@ -96,6 +97,7 @@ export default function ModuleSettings() {
 
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState(null);
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [paymentMethodForm, setPaymentMethodForm] = useState({
@@ -432,16 +434,15 @@ export default function ModuleSettings() {
     }
   };
 
-  const handleDeleteCategory = async (categoryId) => {
+  const handleDeleteCategory = (categoryId) => {
     if (!canEdit) {
       toast('Somente admin/manager pode excluir categorias.', 'error');
       return;
     }
+    setConfirmDeleteCategoryId(categoryId);
+  };
 
-    if (!window.confirm('Deseja realmente excluir esta categoria?')) {
-      return;
-    }
-
+  const performDeleteCategory = async (categoryId) => {
     try {
       await transactionService.deleteCategory(categoryId);
       await loadCategories();
@@ -1247,6 +1248,20 @@ export default function ModuleSettings() {
           {renderAuditSection('investments')}
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDeleteCategoryId != null}
+        title="Excluir categoria"
+        message="Deseja realmente excluir esta categoria? Essa ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmDeleteCategoryId(null)}
+        onConfirm={async () => {
+          const categoryId = confirmDeleteCategoryId;
+          setConfirmDeleteCategoryId(null);
+          if (categoryId != null) await performDeleteCategory(categoryId);
+        }}
+      />
     </div>
   );
 }

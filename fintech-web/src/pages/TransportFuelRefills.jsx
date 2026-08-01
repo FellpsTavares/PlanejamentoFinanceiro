@@ -3,6 +3,8 @@ import { transportService } from '../services/transport';
 import { toast, extractApiError } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
 import CurrencyInput from '../components/CurrencyInput';
+import ConfirmModal from '../components/ConfirmModal';
+import ToggleSwitch from '../components/ToggleSwitch';
 import { formatDecimalStringToBRL, formatDecimalString, formatQuantityDisplay, normalizeInputDecimal } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
@@ -38,6 +40,7 @@ export default function TransportFuelRefills() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const hasLoadedRef = useRef(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const load = async () => {
     // Só mostra o overlay de página inteira no primeiro carregamento — refresh
@@ -136,7 +139,6 @@ export default function TransportFuelRefills() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Excluir este abastecimento?')) return;
     try {
       await transportService.deleteFuelLog(id);
       toast('Abastecimento excluído', 'success');
@@ -200,7 +202,7 @@ export default function TransportFuelRefills() {
                   <td className="px-3 py-2 border-b">
                     <div className="flex gap-2">
                       <button className="btn btn-sm btn-secondary" onClick={() => openEdit(log)}>Editar</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(log.id)}>Excluir</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteId(log.id)}>Excluir</button>
                     </div>
                   </td>
                 </tr>
@@ -285,10 +287,13 @@ export default function TransportFuelRefills() {
                   onChange={(e) => setForm({ ...form, paid_value: e.target.value })}
                 />
               </div>
-              <label className="text-sm flex items-center gap-2 mt-2">
-                <input type="checkbox" checked={form.autoCalcPaidValue} onChange={(e) => setForm({ ...form, autoCalcPaidValue: e.target.checked })} />
-                Calcular valor pago automaticamente (litros × valor/litro − desconto)
-              </label>
+              <div className="mt-2">
+                <ToggleSwitch
+                  checked={form.autoCalcPaidValue}
+                  onChange={(checked) => setForm({ ...form, autoCalcPaidValue: checked })}
+                  label="Calcular valor pago automaticamente"
+                />
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -298,6 +303,20 @@ export default function TransportFuelRefills() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDeleteId != null}
+        title="Excluir abastecimento"
+        message="Deseja excluir este abastecimento? Essa ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={async () => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          if (id != null) await handleDelete(id);
+        }}
+      />
     </div>
   );
 }

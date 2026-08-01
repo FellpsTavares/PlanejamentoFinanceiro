@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { transactionService } from '../services/transactions';
 import { authService } from '../services/auth';
+import ConfirmModal from '../components/ConfirmModal';
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ export default function Transactions() {
   });
   const [categories, setCategories] = useState([]);
   const [creditCardInvoices, setCreditCardInvoices] = useState([]);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmPayInvoiceId, setConfirmPayInvoiceId] = useState(null);
 
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -77,20 +80,16 @@ export default function Transactions() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Tem certeza que deseja deletar esta transação?')) {
-      try {
-        await transactionService.delete(id);
-        setTransactions(transactions.filter((t) => t.id !== id));
-      } catch (err) {
-        setError('Erro ao deletar transação');
-      }
+    try {
+      await transactionService.delete(id);
+      setTransactions(transactions.filter((t) => t.id !== id));
+    } catch (err) {
+      setError('Erro ao deletar transação');
     }
   };
 
   const handleMarkInvoicePaid = async (invoiceId) => {
     const paidAt = new Date().toISOString().split('T')[0];
-    if (!window.confirm('Marcar esta fatura como paga hoje?')) return;
-
     try {
       await transactionService.markCreditCardInvoicePaid(invoiceId, paidAt);
       await loadData();
@@ -236,7 +235,7 @@ export default function Transactions() {
                       <td className="px-4 py-3 text-sm text-center">
                         {invoice.status === 'open' ? (
                           <button
-                            onClick={() => handleMarkInvoicePaid(invoice.id)}
+                            onClick={() => setConfirmPayInvoiceId(invoice.id)}
                             className="text-blue-600 hover:text-blue-800 font-medium"
                           >
                             Marcar como paga
@@ -325,7 +324,7 @@ export default function Transactions() {
                       </td>
                       <td className="px-4 py-3 text-sm text-center">
                         <button
-                          onClick={() => handleDelete(transaction.id)}
+                          onClick={() => setConfirmDeleteId(transaction.id)}
                           className="text-red-600 hover:text-red-800 font-medium"
                         >
                           Deletar
@@ -339,6 +338,35 @@ export default function Transactions() {
           )}
         </div>
       </main>
+
+      <ConfirmModal
+        open={confirmDeleteId != null}
+        title="Deletar transação"
+        message="Tem certeza que deseja deletar esta transação? Essa ação não pode ser desfeita."
+        confirmText="Deletar"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={async () => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          if (id != null) await handleDelete(id);
+        }}
+      />
+
+      <ConfirmModal
+        open={confirmPayInvoiceId != null}
+        title="Marcar fatura como paga"
+        message="Marcar esta fatura como paga hoje?"
+        confirmText="Confirmar"
+        cancelText="Cancelar"
+        variant="info"
+        onCancel={() => setConfirmPayInvoiceId(null)}
+        onConfirm={async () => {
+          const invoiceId = confirmPayInvoiceId;
+          setConfirmPayInvoiceId(null);
+          if (invoiceId != null) await handleMarkInvoicePaid(invoiceId);
+        }}
+      />
     </div>
   );
 }
