@@ -23,6 +23,7 @@ export default function TransportTrips() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
+  const hasLoadedTripsRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState('');
@@ -107,7 +108,10 @@ export default function TransportTrips() {
   };
 
   const loadTrips = async (params = {}) => {
-    setLoading(true);
+    // Só mostra o overlay de página inteira no primeiro carregamento — chamadas
+    // subsequentes (filtros, refresh após criar/editar lançamento) atualizam a
+    // lista sem sumir com a tela.
+    if (!hasLoadedTripsRef.current) setLoading(true);
     try {
       // garantir que, por padrão nesta UI, solicitemos a lista completa (no_page=1)
       const _params = { ...(params || {}) };
@@ -128,6 +132,7 @@ export default function TransportTrips() {
       toast('Erro ao carregar viagens', 'error');
     } finally {
       setLoading(false);
+      hasLoadedTripsRef.current = true;
     }
   };
 

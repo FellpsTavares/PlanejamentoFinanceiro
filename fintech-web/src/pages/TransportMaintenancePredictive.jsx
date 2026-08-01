@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -50,9 +50,10 @@ export default function TransportMaintenancePredictive() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const load = async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const params = {};
       if (filterVehicle) params.vehicle = filterVehicle;
@@ -67,6 +68,7 @@ export default function TransportMaintenancePredictive() {
       toast('Erro ao carregar leituras preditivas', 'error');
     } finally {
       setLoading(false);
+      hasLoadedRef.current = true;
     }
   };
 

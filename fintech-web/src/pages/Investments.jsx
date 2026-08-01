@@ -22,6 +22,7 @@ export default function Investments() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const tickersRef = useRef([]);
+  const hasLoadedInvestmentsRef = useRef(false);
 
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const formatNumber = (value, minimumFractionDigits = 0, maximumFractionDigits = 4) => Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits, maximumFractionDigits });
@@ -29,7 +30,7 @@ export default function Investments() {
   const parseMoney = (value) => Number(String(value || '0').replace(',', '.'));
 
   const fetchInvestments = async () => {
-    setLoading(true);
+    if (!hasLoadedInvestmentsRef.current) setLoading(true);
     try {
       const res = await api.get('/investments/', { params: { include_live: 0 } });
       const base = res.data || res;
@@ -43,6 +44,7 @@ export default function Investments() {
       console.error(err);
     } finally {
       setLoading(false);
+      hasLoadedInvestmentsRef.current = true;
     }
   };
 
