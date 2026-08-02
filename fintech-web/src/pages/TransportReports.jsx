@@ -12,7 +12,12 @@ const REPORT_TYPES = [
   { key: 'by_vehicle', label: 'Resumo por Veículo' },
   { key: 'summary', label: 'Resumo por Categoria' },
   { key: 'fuel_consumption', label: 'Consumo de Combustível' },
+  { key: 'monthly_closing', label: 'Fechamento Mensal' },
 ];
+
+// Relatórios que só existem em PDF (documento composto, não tabela em tela) —
+// não mostram tabela/CSV, apenas o botão de download.
+const PDF_ONLY_REPORT_TYPES = ['monthly_closing'];
 
 // Nome (em português) usado no arquivo exportado — `key` continua em inglês
 // porque é o valor aceito pela API (`report_type`), só o nome do arquivo muda.
@@ -23,6 +28,7 @@ const REPORT_TYPE_FILE_NAMES = {
   by_vehicle: 'resumo_por_veiculo',
   summary: 'resumo_por_categoria',
   fuel_consumption: 'consumo_combustivel',
+  monthly_closing: 'fechamento_mensal',
 };
 
 const COLUMNS = {
@@ -278,29 +284,41 @@ export default function TransportReports() {
   };
 
   const handleExportPdf = async () => {
-    if (!searched || rows.length === 0) {
+    const isPdfOnly = PDF_ONLY_REPORT_TYPES.includes(reportType);
+
+    if (isPdfOnly) {
+      if (!filters.vehicle_id || !filters.start_date || !filters.end_date) {
+        toast('Selecione o veículo e o período para gerar o fechamento.', 'warning');
+        return;
+      }
+    } else if (!searched || rows.length === 0) {
       toast('Pesquise primeiro para exportar.', 'warning');
       return;
     }
+
     try {
-      await reportsService.downloadTransportReportPdf(
-        buildParams(),
-        `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.pdf`
-      );
+      let filename = `relatorio_transporte_${REPORT_TYPE_FILE_NAMES[reportType] || reportType}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      if (reportType === 'monthly_closing') {
+        const vehicle = vehicles.find((v) => String(v.id) === String(filters.vehicle_id));
+        const plate = vehicle?.plate || 'veiculo';
+        filename = `fechamento_mensal_${plate}_${filters.start_date}_${filters.end_date}.pdf`;
+      }
+      await reportsService.downloadTransportReportPdf(buildParams(), filename);
       toast('PDF exportado com sucesso.', 'success');
     } catch (err) {
       console.error(err);
-      toast('Erro ao exportar PDF.', 'error');
+      toast(err?.response?.data?.detail || 'Erro ao exportar PDF.', 'error');
     }
   };
 
+  const isPdfOnlyReport = PDF_ONLY_REPORT_TYPES.includes(reportType);
   const columns = COLUMNS[reportType] || [];
   const orderOptions = ORDER_BY_OPTIONS[reportType] || [];
   const showMovementTypeFilter = reportType === 'movements';
   const showCategoryFilter = reportType === 'movements' || reportType === 'summary';
   const showStatusFilter = reportType === 'trips' || reportType === 'driver_payments';
   const showModalityFilter = reportType === 'trips';
-  const showVehicleFilter = ['movements', 'trips', 'driver_payments', 'summary', 'fuel_consumption'].includes(reportType);
+  const showVehicleFilter = ['movements', 'trips', 'driver_payments', 'summary', 'fuel_consumption', 'monthly_closing'].includes(reportType);
   const showOrderBy = orderOptions.length > 0;
 
   return (
@@ -309,20 +327,28 @@ export default function TransportReports() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Relatórios · Transportadora</h1>
-          <p className="text-sm text-gray-500 mt-1">Filtre e visualize os dados diretamente na tela. Exporte para CSV ou PDF quando necessário.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isPdfOnlyReport
+              ? 'Selecione o veículo e o período para gerar o documento em PDF.'
+              : 'Filtre e visualize os dados diretamente na tela. Exporte para CSV ou PDF quando necessário.'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <button
-            className="btn btn-secondary"
-            onClick={handleExportCsv}
-            disabled={!searched || rows.length === 0}
-          >
-            Exportar CSV
-          </button>
+          {!isPdfOnlyReport && (
+            <button
+              className="btn btn-secondary"
+              onClick={handleExportCsv}
+              disabled={!searched || rows.length === 0}
+            >
+              Exportar CSV
+            </button>
+          )}
           <button
             className="btn btn-primary"
             onClick={handleExportPdf}
-            disabled={!searched || rows.length === 0}
+            disabled={isPdfOnlyReport
+              ? (!filters.vehicle_id || !filters.start_date || !filters.end_date)
+              : (!searched || rows.length === 0)}
           >
             Download PDF
           </button>
@@ -372,13 +398,16 @@ export default function TransportReports() {
           {/* Veículo */}
           {showVehicleFilter && (
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Veículo</label>
+              <label className="block text-xs text-gray-600 mb-1">
+                Veículo{isPdfOnlyReport && ' *'}
+              </label>
               <select
                 className="input-field w-full"
                 value={filters.vehicle_id}
                 onChange={(e) => handleFilter('vehicle_id', e.target.value)}
               >
-                <option value="">Todos</option>
+                {!isPdfOnlyReport && <option value="">Todos</option>}
+                {isPdfOnlyReport && <option value="">Selecione...</option>}
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>{v.plate} — {v.model}</option>
                 ))}
@@ -480,27 +509,57 @@ export default function TransportReports() {
           )}
         </div>
 
-        <div className="mt-4 flex justify-end">
-          <button
-            className="btn btn-primary min-w-[120px]"
-            onClick={handleSearch}
-            disabled={loading}
-          >
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Buscando…
-              </span>
-            ) : 'Pesquisar'}
-          </button>
-        </div>
+        {!isPdfOnlyReport && (
+          <div className="mt-4 flex justify-end">
+            <button
+              className="btn btn-primary min-w-[120px]"
+              onClick={handleSearch}
+              disabled={loading}
+            >
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Buscando…
+                </span>
+              ) : 'Pesquisar'}
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Relatório de fechamento mensal — documento composto, sem tabela em tela */}
+      {isPdfOnlyReport && (
+        <div className="bg-white rounded border shadow-sm p-6">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 h-12 w-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">O que este relatório mostra</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Um PDF único de fechamento do veículo selecionado no período informado, reunindo: resumo financeiro
+                (receita bruta, despesas, pagamento ao motorista e resultado), viagens detalhadas, lançamentos de
+                gastos/receitas, pagamentos ao motorista, resumo por categoria de despesa e consumo de combustível.
+                Cada seção é claramente identificada e, se não couber inteira em uma página, continua automaticamente
+                na página seguinte.
+              </p>
+              {(!filters.vehicle_id || !filters.start_date || !filters.end_date) && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mt-3 inline-block">
+                  Selecione o veículo, a data início e a data fim acima para habilitar o download.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Agregados */}
-      {searched && meta?.aggregates && reportType === 'fuel_consumption' && (
+      {!isPdfOnlyReport && searched && meta?.aggregates && reportType === 'fuel_consumption' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           {[
             { key: 'total_distance_km', icon: FUEL_STAT_ICONS.distance },
@@ -524,7 +583,7 @@ export default function TransportReports() {
         </div>
       )}
 
-      {searched && meta?.aggregates && reportType !== 'fuel_consumption' && (
+      {!isPdfOnlyReport && searched && meta?.aggregates && reportType !== 'fuel_consumption' && (
         <div className="flex flex-wrap gap-3 mb-4">
           {Object.entries(meta.aggregates).map(([key, val]) => {
             const label = AGGREGATE_LABELS[key] || key.replace(/_/g, ' ').replace(/\b(\w)/g, (c) => c.toUpperCase());
@@ -542,7 +601,7 @@ export default function TransportReports() {
       )}
 
       {/* Tabela de resultados */}
-      {searched && (
+      {!isPdfOnlyReport && searched && (
         <div className="bg-white rounded border shadow-sm overflow-hidden">
           {rows.length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">
@@ -606,7 +665,7 @@ export default function TransportReports() {
         </div>
       )}
 
-      {!searched && !loading && (
+      {!isPdfOnlyReport && !searched && !loading && (
         <div className="mt-8 flex flex-col items-center text-gray-400">
           <svg className="w-12 h-12 mb-2 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
