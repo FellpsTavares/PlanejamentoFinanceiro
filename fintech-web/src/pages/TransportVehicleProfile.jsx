@@ -7,6 +7,7 @@ import TransportEntryExpenseModal from '../components/TransportEntryExpenseModal
 import ConfirmModal from '../components/ConfirmModal';
 import TransportTripModal from '../components/TransportTripModal';
 import CurrencyInput from '../components/CurrencyInput';
+import ToggleSwitch from '../components/ToggleSwitch';
 import { toast, extractApiError } from '../utils/toast';
 import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
@@ -394,18 +395,6 @@ export default function TransportVehicleProfile() {
     } catch (err) {
       console.error(err);
       toast(extractApiError(err, 'Erro ao registrar abastecimento'), 'error');
-    }
-  };
-
-  const handleDeleteFuelLog = async (fuelLogId) => {
-    if (!window.confirm('Excluir este abastecimento?')) return;
-    try {
-      await transportService.deleteFuelLog(fuelLogId);
-      await Promise.all([refreshTransportAssets(), refreshVehicle()]);
-      toast('Abastecimento excluído', 'success');
-    } catch (err) {
-      console.error(err);
-      toast('Erro ao excluir abastecimento', 'error');
     }
   };
 
@@ -879,10 +868,13 @@ export default function TransportVehicleProfile() {
                     />
                   </div>
                 </div>
-                <label className="text-sm flex items-center gap-2 self-end pb-2">
-                  <input type="checkbox" checked={fuelForm.autoCalcPaidValue} onChange={(e) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: e.target.checked }))} />
-                  Calcular valor pago automaticamente
-                </label>
+                <div className="self-end pb-2">
+                  <ToggleSwitch
+                    checked={fuelForm.autoCalcPaidValue}
+                    onChange={(checked) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: checked }))}
+                    label="Calcular valor pago automaticamente"
+                  />
+                </div>
 
                 <button type="submit" className="btn btn-primary md:col-span-4">Registrar abastecimento</button>
               </form>
@@ -894,7 +886,7 @@ export default function TransportVehicleProfile() {
                       <div className="font-semibold">{new Date(f.date).toLocaleDateString('pt-BR')} • {f.fuel_type_display} • KM {formatNumber(f.odometer_km, 0, 0)}</div>
                       <div className="text-sm text-gray-600">{formatNumber(f.liters, 0, 3)} L • {formatBRL(f.paid_value)}{Number(f.discount) > 0 ? ` (desconto ${formatBRL(f.discount)})` : ''}</div>
                     </div>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteFuelLog(f.id)}>Excluir</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => { setConfirmPayload({ kind: 'fuel', id: f.id }); setConfirmOpen(true); }}>Excluir</button>
                   </li>
                 ))}
               </ul>
@@ -925,7 +917,7 @@ export default function TransportVehicleProfile() {
       <ConfirmModal
         open={confirmOpen}
         title="Confirma exclusão"
-        message={confirmPayload ? (confirmPayload.kind === 'trip' ? 'Deseja excluir esta viagem?' : confirmPayload.kind === 'revenue' ? 'Deseja excluir esta entrada?' : 'Deseja excluir esta despesa?') : ''}
+        message={confirmPayload ? (confirmPayload.kind === 'trip' ? 'Deseja excluir esta viagem?' : confirmPayload.kind === 'revenue' ? 'Deseja excluir esta entrada?' : confirmPayload.kind === 'fuel' ? 'Deseja excluir este abastecimento?' : 'Deseja excluir esta despesa?') : ''}
         confirmText="Excluir"
         cancelText="Cancelar"
         onCancel={() => { setConfirmOpen(false); setConfirmPayload(null); }}
@@ -939,6 +931,9 @@ export default function TransportVehicleProfile() {
             } else if (confirmPayload.kind === 'trip') {
               await transportService.deleteTrip(confirmPayload.id);
               await refreshTrips();
+            } else if (confirmPayload.kind === 'fuel') {
+              await transportService.deleteFuelLog(confirmPayload.id);
+              await Promise.all([refreshTransportAssets(), refreshVehicle()]);
             } else {
               await transportService.deleteExpense(confirmPayload.id);
               const exp = await transportService.getExpenses(id);

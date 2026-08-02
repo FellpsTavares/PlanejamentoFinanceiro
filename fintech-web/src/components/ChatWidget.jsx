@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
+import ConfirmModal from './ConfirmModal';
 
 // Constantes
 const VIAGEM_TRIGGERS = ['adicionar viagem', 'nova viagem', 'criar viagem', 'registrar viagem'];
@@ -326,6 +327,7 @@ export default function ChatWidget({ open, onClose }) {
   const [input, setInput] = useState('');
   const [processing, setProcessing] = useState(false);
   const [pendingTrip, setPendingTrip] = useState(null);
+  const [confirmCancelTripId, setConfirmCancelTripId] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -483,11 +485,7 @@ export default function ChatWidget({ open, onClose }) {
                       📋 Acessar
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm('Confirma exclusão da viagem?')) {
-                          handleCancelTrip(msg.tripData.id);
-                        }
-                      }}
+                      onClick={() => setConfirmCancelTripId(msg.tripData.id)}
                       className="flex-1 bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 font-medium text-sm border border-red-300"
                     >
                       ❌ Cancelar
@@ -557,6 +555,20 @@ export default function ChatWidget({ open, onClose }) {
           </button>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmCancelTripId != null}
+        title="Excluir viagem"
+        message="Confirma exclusão da viagem?"
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmCancelTripId(null)}
+        onConfirm={() => {
+          const tripId = confirmCancelTripId;
+          setConfirmCancelTripId(null);
+          if (tripId != null) handleCancelTrip(tripId);
+        }}
+      />
     </div>
   );
 }

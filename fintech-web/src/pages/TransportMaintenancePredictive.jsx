@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
+import ConfirmModal from '../components/ConfirmModal';
 
 const COMPONENT_OPTIONS = [
   { value: 'tires', label: 'Pneus' },
@@ -51,6 +52,7 @@ export default function TransportMaintenancePredictive() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const hasLoadedRef = useRef(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const load = async () => {
     if (!hasLoadedRef.current) setLoading(true);
@@ -125,7 +127,6 @@ export default function TransportMaintenancePredictive() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Excluir esta leitura preditiva?')) return;
     try {
       await transportService.deletePredictiveReading(id);
       toast('Leitura excluída', 'success');
@@ -188,7 +189,7 @@ export default function TransportMaintenancePredictive() {
                   <td className="px-3 py-2 border-b">
                     <div className="flex gap-2">
                       <button className="btn btn-sm btn-secondary" onClick={() => openEdit(r)}>Editar</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(r.id)}>Excluir</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteId(r.id)}>Excluir</button>
                     </div>
                   </td>
                 </tr>
@@ -261,6 +262,20 @@ export default function TransportMaintenancePredictive() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDeleteId != null}
+        title="Excluir leitura"
+        message="Deseja excluir esta leitura preditiva? Essa ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={async () => {
+          const id = confirmDeleteId;
+          setConfirmDeleteId(null);
+          if (id != null) await handleDelete(id);
+        }}
+      />
     </div>
   );
 }

@@ -5,6 +5,8 @@ import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
 import { toast, extractApiError } from '../utils/toast';
 import CurrencyInput from '../components/CurrencyInput';
+import ConfirmModal from '../components/ConfirmModal';
+import ToggleSwitch from '../components/ToggleSwitch';
 import { formatDecimalString, formatQuantityDisplay, normalizeInputDecimal } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
@@ -40,6 +42,8 @@ export default function TransportTrips() {
   const [movementTab, setMovementTab] = useState('manual'); // 'manual' | 'fuel'
   const [fuelForm, setFuelForm] = useState(EMPTY_FUEL_FORM);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [confirmDeleteMovement, setConfirmDeleteMovement] = useState(null);
+  const [confirmReopenOpen, setConfirmReopenOpen] = useState(false);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -292,7 +296,6 @@ export default function TransportTrips() {
 
   const handleReopenTrip = async () => {
     if (!selectedTrip) return;
-    if (!window.confirm('Deseja reabrir esta viagem? Ela voltará ao status "Em curso" e poderá receber novos lançamentos.')) return;
 
     try {
       setSaving(true);
@@ -432,7 +435,6 @@ export default function TransportTrips() {
 
   const handleDeleteMovement = async (movement) => {
     if (!selectedTrip) return;
-    if (!window.confirm('Deseja excluir este lançamento?')) return;
 
     try {
       setSaving(true);
@@ -886,10 +888,11 @@ export default function TransportTrips() {
                       </div>
                     </div>
 
-                    <label className="text-sm flex items-center gap-2">
-                      <input type="checkbox" checked={fuelForm.autoCalcPaidValue} onChange={(e) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: e.target.checked }))} />
-                      Calcular valor pago automaticamente (litros × valor/litro − desconto)
-                    </label>
+                    <ToggleSwitch
+                      checked={fuelForm.autoCalcPaidValue}
+                      onChange={(checked) => setFuelForm((p) => ({ ...p, autoCalcPaidValue: checked }))}
+                      label="Calcular valor pago automaticamente"
+                    />
 
                     <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
                       ✓ Isso registra o abastecimento no histórico do veículo (conta pra média de consumo) e já lança o valor pago como despesa "Combustível" nesta viagem.
@@ -918,7 +921,7 @@ export default function TransportTrips() {
                         {selectedTrip.status === 'in_progress' && (
                           <>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleEditMovement(movement)} disabled={saving}>Editar</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleDeleteMovement(movement)} disabled={saving}>Excluir</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirmDeleteMovement(movement)} disabled={saving}>Excluir</button>
                           </>
                         )}
                       </div>
@@ -945,7 +948,7 @@ export default function TransportTrips() {
                 ) : (
                   <div className="flex items-center gap-3">
                     <p className="text-sm text-gray-600">Esta viagem já foi encerrada.</p>
-                    <button type="button" className="btn btn-secondary" onClick={handleReopenTrip} disabled={saving}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setConfirmReopenOpen(true)} disabled={saving}>
                       {saving ? 'Reabrindo...' : '🔄 Reabrir viagem'}
                     </button>
                   </div>
@@ -955,6 +958,34 @@ export default function TransportTrips() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={Boolean(confirmDeleteMovement)}
+        title="Excluir lançamento"
+        message="Deseja excluir este lançamento? Essa ação não pode ser desfeita."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onCancel={() => setConfirmDeleteMovement(null)}
+        onConfirm={async () => {
+          const movement = confirmDeleteMovement;
+          setConfirmDeleteMovement(null);
+          if (movement) await handleDeleteMovement(movement);
+        }}
+      />
+
+      <ConfirmModal
+        open={confirmReopenOpen}
+        title="Reabrir viagem"
+        message='Ela voltará ao status "Em curso" e poderá receber novos lançamentos.'
+        confirmText="Reabrir"
+        cancelText="Cancelar"
+        variant="info"
+        onCancel={() => setConfirmReopenOpen(false)}
+        onConfirm={async () => {
+          setConfirmReopenOpen(false);
+          await handleReopenTrip();
+        }}
+      />
     </div>
   );
 }
