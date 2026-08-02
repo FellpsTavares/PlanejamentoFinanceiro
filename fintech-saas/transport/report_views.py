@@ -114,6 +114,7 @@ _REPORT_TYPE_FILE_NAMES = {
     'by_vehicle': 'resumo_por_veiculo',
     'summary': 'resumo_por_categoria',
     'fuel_consumption': 'consumo_combustivel',
+    'monthly_closing': 'fechamento_mensal',
 }
 
 
@@ -145,6 +146,23 @@ def _parse_bool_param(value):
     return str(value).lower() in ('1', 'true', 'yes')
 
 
+def _fmt_date(value):
+    if not value:
+        return '—'
+    try:
+        return value.strftime('%d/%m/%Y')
+    except AttributeError:
+        return str(value)
+
+
+def _fmt_money(value):
+    if value is None:
+        return '—'
+    value = Decimal(value)
+    text = f'{value:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+    return f'R$ {text}'
+
+
 class TransportReportView(APIView):
     permission_classes = [IsAuthenticated, HasTransportModule]
 
@@ -163,6 +181,12 @@ class TransportReportView(APIView):
         except Exception:
             pass
         logger.warning("TransportReportView GET called: user=%s report_type=%s format=%s path=%s", getattr(request.user, 'email', request.user), report_type, fmt, request.path)
+
+        # Fechamento Mensal é um relatório composto (várias seções) por veículo,
+        # disponível apenas em PDF — não segue o formato genérico rows/meta usado
+        # pelos demais tipos, então tem despacho próprio.
+        if report_type == 'monthly_closing':
+            return self._handle_monthly_closing(request, tenant)
 
         handlers = {
             'movements': self._report_movements,
@@ -774,3 +798,322 @@ class TransportReportView(APIView):
                 },
             },
         })
+
+    # ------------------------------------------------------------------
+    # Relatório: Fechamento Mensal (composto, por veículo — apenas PDF)
+    # ------------------------------------------------------------------
+    def _handle_monthly_closing(self, request, tenant):
+        params = request.query_params
+
+        vehicle_id_raw = params.get('vehicle_id') or params.get('vehicle')
+        if not vehicle_id_raw:
+            return Response(
+                {'detail': 'Selecione um veículo para gerar o fechamento mensal.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            vehicle_id = int(vehicle_id_raw)
+        except (TypeError, ValueError):
+            return Response({'detail': 'Veículo inválido.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        vehicle = Vehicle.objects.filter(id=vehicle_id, tenant=tenant).first()
+        if not vehicle:
+            return Response({'detail': 'Veículo não encontrado.'}, status=http_status.HTTP_404_NOT_FOUND)
+
+        start, end = self._get_dates(params)
+        if not start or not end:
+            return Response(
+                {'detail': 'Informe a data de início e fim do período para o fechamento mensal.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ---- Viagens do período (por data de início/abertura da viagem) ----
+        trips_qs = (
+            Trip.objects.filter(vehicle=vehicle)
+            .filter(Q(start_date__gte=start, start_date__lte=end) | Q(start_date__isnull=True, date__gte=start, date__lte=end))
+            .select_related('driver')
+            .order_by('start_date', 'date', 'id')
+        )
+
+        trip_rows = []
+        driver_payment_rows = []
+        total_gross = Decimal('0')
+        total_trip_expense = Decimal('0')
+        total_driver_payment = Decimal('0')
+
+        for t in trips_qs:
+            tv = t.total_value or Decimal('0')
+            ev = t.expense_value or Decimal('0')
+            dp = t.driver_payment or Decimal('0')
+            net = tv - ev - dp
+            total_gross += tv
+            total_trip_expense += ev
+            total_driver_payment += dp
+
+            trip_rows.append([
+                _fmt_date(t.start_date or t.date),
+                _fmt_date(t.end_date),
+                MODALITY_LABELS.get(t.modality, t.modality),
+                STATUS_LABELS.get(t.status, t.status),
+                _fmt_money(tv),
+                _fmt_money(ev),
+                _fmt_money(dp),
+                _fmt_money(net),
+            ])
+
+            if t.driver_id and not t.driver_is_owner:
+                driver_payment_rows.append([
+                    t.driver.name,
+                    _fmt_date(t.start_date or t.date),
+                    _fmt_date(t.end_date),
+                    _fmt_money(tv),
+                    _fmt_money(dp),
+                ])
+
+        # ---- Lançamentos (gastos/receitas) do período, por data do lançamento ----
+        movements_qs = (
+            TripMovement.objects.filter(trip__vehicle=vehicle, date__gte=start, date__lte=end)
+            .order_by('date', 'id')
+        )
+
+        movement_rows = []
+        total_movement_expense = Decimal('0')
+        total_movement_revenue = Decimal('0')
+        category_totals = {}
+
+        for m in movements_qs:
+            amount = m.amount or Decimal('0')
+            if m.movement_type == 'expense':
+                total_movement_expense += amount
+                cat = category_totals.setdefault(m.expense_category, {'total': Decimal('0'), 'count': 0})
+                cat['total'] += amount
+                cat['count'] += 1
+            else:
+                total_movement_revenue += amount
+
+            movement_rows.append([
+                _fmt_date(m.date),
+                MOVEMENT_TYPE_LABELS.get(m.movement_type, m.movement_type),
+                MOVEMENT_CATEGORY_LABELS.get(m.expense_category, m.expense_category) if m.movement_type == 'expense' else '—',
+                _fmt_money(amount),
+                m.description or '—',
+            ])
+
+        category_rows = [
+            [MOVEMENT_CATEGORY_LABELS.get(cat, cat), str(info['count']), _fmt_money(info['total'])]
+            for cat, info in sorted(category_totals.items(), key=lambda kv: kv[1]['total'], reverse=True)
+        ]
+
+        # ---- Consumo de combustível do período ----
+        fuel_qs = FuelLog.objects.filter(vehicle=vehicle, date__gte=start, date__lte=end).order_by('date', 'id')
+        fuel_rows = []
+        for f in fuel_qs:
+            fuel_rows.append([
+                _fmt_date(f.date),
+                f.get_fuel_type_display(),
+                f'{f.liters:.3f} L'.replace('.', ','),
+                _fmt_money(f.price_per_liter) if f.price_per_liter is not None else '—',
+                _fmt_money(f.discount) if f.discount else '—',
+                _fmt_money(f.paid_value),
+                f'{f.odometer_km} km',
+            ])
+
+        diesel_qs = fuel_qs.filter(fuel_type=FuelLog.FUEL_DIESEL)
+        diesel_agg = diesel_qs.aggregate(total_liters=Sum('liters'), min_km=Min('odometer_km'), max_km=Max('odometer_km'), count=Count('id'))
+        arla_total = fuel_qs.filter(fuel_type=FuelLog.FUEL_ARLA).aggregate(total=Sum('liters'))['total'] or Decimal('0')
+        diesel_liters = diesel_agg['total_liters'] or Decimal('0')
+        distance_km = max((diesel_agg['max_km'] or 0) - (diesel_agg['min_km'] or 0), 0)
+        avg_consumption = None
+        if distance_km > 0 and diesel_liters > 0 and (diesel_agg['count'] or 0) >= 2:
+            avg_consumption = round(distance_km / float(diesel_liters), 3)
+
+        fuel_summary = [
+            f'Abastecimentos no período: {fuel_qs.count()}',
+            f"Litros de Diesel: {str(diesel_liters).replace('.', ',')} L",
+            f"Litros de Arla: {str(arla_total).replace('.', ',')} L",
+            f'Distância percorrida (base Diesel): {distance_km} km',
+            f"Consumo médio: {str(avg_consumption).replace('.', ',') + ' km/l' if avg_consumption is not None else '—'}",
+        ]
+
+        # ---- Resumo financeiro do fechamento ----
+        net_result = total_gross + total_movement_revenue - total_movement_expense - total_driver_payment
+        financial_summary = [
+            ('Receita bruta das viagens no período', _fmt_money(total_gross)),
+            ('Receitas extras lançadas (fora do valor da viagem)', _fmt_money(total_movement_revenue)),
+            ('Despesas lançadas no período (combustível + outros gastos)', _fmt_money(total_movement_expense)),
+            ('Pagamento ao motorista (viagens do período)', _fmt_money(total_driver_payment)),
+            ('Resultado do período', _fmt_money(net_result)),
+        ]
+
+        pdf_bytes = self._build_monthly_closing_pdf(
+            tenant=tenant,
+            vehicle=vehicle,
+            start=start,
+            end=end,
+            financial_summary=financial_summary,
+            trip_rows=trip_rows,
+            movement_rows=movement_rows,
+            driver_payment_rows=driver_payment_rows,
+            category_rows=category_rows,
+            fuel_summary=fuel_summary,
+            fuel_rows=fuel_rows,
+        )
+
+        period_slug = f"{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}"
+        filename = f"fechamento_mensal_{vehicle.plate}_{period_slug}.pdf".replace(' ', '_')
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @staticmethod
+    def _build_monthly_closing_pdf(tenant, vehicle, start, end, financial_summary, trip_rows,
+                                    movement_rows, driver_payment_rows, category_rows,
+                                    fuel_summary, fuel_rows):
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+        from reportlab.lib.units import mm
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=landscape(A4),
+            leftMargin=15 * mm, rightMargin=15 * mm,
+            topMargin=15 * mm, bottomMargin=15 * mm,
+        )
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, spaceAfter=4)
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=9, textColor=colors.grey, spaceAfter=10)
+        section_style = ParagraphStyle('Section', parent=styles['Heading3'], fontName='Helvetica-Bold', fontSize=11,
+                                        textColor=colors.HexColor('#1E3A8A'), spaceBefore=14, spaceAfter=3)
+        section_note_style = ParagraphStyle('SectionNote', parent=styles['Normal'], fontSize=7.5, textColor=colors.grey, spaceAfter=6)
+        normal = styles['Normal']
+        empty_style = ParagraphStyle('Empty', parent=styles['Normal'], fontSize=8, textColor=colors.grey, spaceAfter=6)
+
+        def section_header(title, note):
+            """Título + legenda mantidos juntos para não 'sobrar' sozinhos no fim da página."""
+            return KeepTogether([Paragraph(title, section_style), Paragraph(note, section_note_style)])
+
+        def make_table(headers, rows, col_widths=None):
+            data = [headers] + rows
+            tbl = Table(data, repeatRows=1, hAlign='LEFT', colWidths=col_widths)
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 7.5),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+                ('TOPPADDING', (0, 0), (-1, 0), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 3),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                ('GRID', (0, 0), (-1, -1), 0.25, colors.HexColor('#E5E7EB')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAFAFB')]),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            return tbl
+
+        story = []
+        story.append(Paragraph('Fechamento Mensal — Transportadora', title_style))
+        story.append(Paragraph(
+            f"Veículo: <b>{vehicle.plate}</b> — {vehicle.model or ''} ({vehicle.year or '—'}) &nbsp;|&nbsp; "
+            f"Período: <b>{_fmt_date(start)}</b> até <b>{_fmt_date(end)}</b> &nbsp;|&nbsp; Tenant: {tenant.name}",
+            subtitle_style,
+        ))
+
+        # ---- Resumo financeiro ----
+        story.append(section_header(
+            'Resumo Financeiro do Fechamento',
+            'Consolidado do período: receita das viagens, lançamentos de despesa/receita e pagamento ao motorista.',
+        ))
+        summary_tbl = Table(
+            [[label, value] for label, value in financial_summary],
+            colWidths=[130 * mm, 40 * mm], hAlign='LEFT',
+        )
+        summary_style = [
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('LINEBELOW', (0, 0), (-1, -2), 0.25, colors.HexColor('#E5E7EB')),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('LINEABOVE', (0, -1), (-1, -1), 0.75, colors.HexColor('#111827')),
+            ('TOPPADDING', (0, -1), (-1, -1), 6),
+        ]
+        summary_tbl.setStyle(TableStyle(summary_style))
+        story.append(summary_tbl)
+
+        # ---- Viagens do período ----
+        story.append(section_header(
+            'Viagens do Período',
+            'Todas as viagens deste veículo cujo início ocorreu dentro do período selecionado.',
+        ))
+        if trip_rows:
+            story.append(make_table(
+                ['Início', 'Fim', 'Modalidade', 'Status', 'Bruto (R$)', 'Despesas (R$)', 'Motorista (R$)', 'Líquido (R$)'],
+                trip_rows,
+            ))
+        else:
+            story.append(Paragraph('Nenhuma viagem iniciada neste período.', empty_style))
+
+        # ---- Lançamentos (gastos/receitas) ----
+        story.append(section_header(
+            'Lançamentos (Gastos/Receitas)',
+            'Movimentações financeiras lançadas nas viagens deste veículo, pela data do próprio lançamento.',
+        ))
+        if movement_rows:
+            story.append(make_table(
+                ['Data', 'Tipo', 'Categoria', 'Valor (R$)', 'Descrição'],
+                movement_rows,
+            ))
+        else:
+            story.append(Paragraph('Nenhum lançamento neste período.', empty_style))
+
+        # ---- Pagamento ao motorista ----
+        story.append(section_header(
+            'Pagamento ao Motorista',
+            'Viagens do período com motorista vinculado (exclui viagens em que o motorista é o proprietário).',
+        ))
+        if driver_payment_rows:
+            story.append(make_table(
+                ['Motorista', 'Início', 'Fim', 'Valor da Viagem (R$)', 'Pagamento (R$)'],
+                driver_payment_rows,
+            ))
+        else:
+            story.append(Paragraph('Nenhum pagamento a motorista neste período.', empty_style))
+
+        # ---- Resumo por categoria ----
+        story.append(section_header(
+            'Resumo por Categoria de Despesa',
+            'Total de despesas lançadas no período, agrupado por categoria.',
+        ))
+        if category_rows:
+            story.append(make_table(['Categoria', 'Lançamentos', 'Total (R$)'], category_rows))
+        else:
+            story.append(Paragraph('Nenhuma despesa lançada neste período.', empty_style))
+
+        # ---- Consumo de combustível ----
+        story.append(section_header(
+            'Consumo de Combustível',
+            'Abastecimentos registrados no período. O consumo médio (km/l) considera apenas Diesel.',
+        ))
+        for line in fuel_summary:
+            story.append(Paragraph(f'• {line}', normal))
+        story.append(Spacer(1, 4))
+        if fuel_rows:
+            story.append(make_table(
+                ['Data', 'Tipo', 'Litros', 'Valor/Litro (R$)', 'Desconto (R$)', 'Valor Pago (R$)', 'KM'],
+                fuel_rows,
+            ))
+        else:
+            story.append(Paragraph('Nenhum abastecimento registrado neste período.', empty_style))
+
+        story.append(Spacer(1, 10))
+        generated_at = datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')
+        story.append(Paragraph(
+            f'Relatório gerado em: {generated_at}',
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.grey)
+        ))
+
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
