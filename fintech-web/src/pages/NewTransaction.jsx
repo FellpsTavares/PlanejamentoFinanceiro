@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { transactionService } from '../services/transactions';
 import { authService } from '../services/auth';
+import { todayLocalISO } from '../utils/format';
 
 export default function NewTransaction() {
   const navigate = useNavigate();
@@ -17,10 +18,10 @@ export default function NewTransaction() {
     category: '',
     payment_method: '',
     is_fixed_monthly_debt: false,
-    fixed_start_date: new Date().toISOString().split('T')[0],
+    fixed_start_date: todayLocalISO(),
     fixed_end_date: '',
     fixed_due_day: '',
-    transaction_date: new Date().toISOString().split('T')[0],
+    transaction_date: todayLocalISO(),
     notes: '',
   });
 
@@ -116,7 +117,7 @@ export default function NewTransaction() {
           is_fixed_monthly: true,
         });
 
-        navigate('/transactions');
+        navigate('/transacoes');
         return;
       }
 
@@ -132,7 +133,7 @@ export default function NewTransaction() {
       });
 
       // Redirecionar para transações
-      navigate('/transactions');
+      navigate('/transacoes');
     } catch (err) {
       setError(err.response?.data?.detail || 'Erro ao criar transação');
     } finally {
@@ -381,7 +382,7 @@ export default function NewTransaction() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/transactions')}
+                onClick={() => navigate('/transacoes')}
                 className="btn-secondary"
               >
                 Cancelar
