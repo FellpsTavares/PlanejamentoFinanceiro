@@ -219,8 +219,18 @@ class Trip(models.Model):
 
     def recalculate_from_movements(self):
         revenue_sum = self.movements.filter(movement_type='revenue').aggregate(total=Sum('amount'))['total'] or 0
-        other_expense_sum = self.movements.filter(movement_type='expense', expense_category='other').aggregate(total=Sum('amount'))['total'] or 0
-        fuel_expense_sum = self.movements.filter(movement_type='expense', expense_category='fuel').aggregate(total=Sum('amount'))['total'] or 0
+
+        # Só considera lançamentos MANUAIS (is_auto_generated=False) na soma.
+        # Os automáticos (is_auto_generated=True) são um "espelho" gerado por
+        # sync_expense_movements() a partir de base_expense_value/fuel_expense_value
+        # — somá-los de volta aqui cria uma referência circular: o espelho conta a
+        # si mesmo junto com os lançamentos manuais que ele resume, dobrando o
+        # valor toda vez que algo dispara um recálculo depois do espelho já existir
+        # (por exemplo, editar a categoria de um lançamento automático antigo).
+        manual_other = self.movements.filter(movement_type='expense', expense_category='other', is_auto_generated=False)
+        manual_fuel = self.movements.filter(movement_type='expense', expense_category='fuel', is_auto_generated=False)
+        other_expense_sum = manual_other.aggregate(total=Sum('amount'))['total']
+        fuel_expense_sum = manual_fuel.aggregate(total=Sum('amount'))['total']
 
         # "Valor da viagem já recebido" é um campo de controle manual (o usuário
         # marca/desmarca na tela e salva) — este método só deve PROMOVER is_received
@@ -231,8 +241,16 @@ class Trip(models.Model):
         # de gasto — que dispara este método via sinal ao recriar os lançamentos
         # automáticos — apagava silenciosamente a marcação manual do usuário.
         self.is_received = self.is_received or bool(revenue_sum > 0)
-        self.base_expense_value = other_expense_sum
-        self.fuel_expense_value = fuel_expense_sum
+
+        # Só sobrescreve o campo quando existir pelo menos um lançamento manual
+        # daquela categoria. Sem nenhum lançamento manual, o valor pode ter vindo
+        # de uma entrada direta no formulário completo da viagem (sem lançamento
+        # correspondente em "Lançar movimentação") — preservar em vez de zerar.
+        if manual_other.exists():
+            self.base_expense_value = other_expense_sum or 0
+        if manual_fuel.exists():
+            self.fuel_expense_value = fuel_expense_sum or 0
+
         self.expense_value = (self.base_expense_value or 0) + (self.fuel_expense_value or 0) + (self.driver_payment or 0)
         self.save(update_fields=['is_received', 'base_expense_value', 'fuel_expense_value', 'expense_value'])
 
@@ -272,6 +290,22 @@ class Trip(models.Model):
         )
         existing_auto_movements.delete()
 
+        # Resolve as categorias padrão (Combustível/Outros Gastos) uma única vez,
+        # para vincular a FK `category` nos lançamentos automáticos abaixo — sem
+        # isso, esses lançamentos ficavam com category_id em branco e caíam num
+        # bucket separado dos lançamentos manuais da mesma categoria nos
+        # relatórios (ex.: "Combustível" aparecendo em duas linhas distintas no
+        # Resumo por Categoria, uma para os automáticos sem categoria vinculada e
+        # outra para os manuais, cada uma com seu próprio total).
+        other_category = None
+        fuel_category = None
+        if self.vehicle_id:
+            from finance.defaults import ensure_default_category
+            from finance.models import Category
+
+            other_category = ensure_default_category(self.vehicle.tenant, Category.SYSTEM_KEY_OTHER)
+            fuel_category = ensure_default_category(self.vehicle.tenant, Category.SYSTEM_KEY_FUEL)
+
         # 1. Criar movimentações de gastos individuais (expense_items)
         if expense_items:
             for item in expense_items:
@@ -284,6 +318,7 @@ class Trip(models.Model):
                         date=trip_date,
                         movement_type='expense',
                         expense_category='other',
+                        category=other_category,
                         amount=valor,
                         description=descricao,
                         is_auto_generated=True  # Marcar como automática
@@ -312,6 +347,7 @@ class Trip(models.Model):
                 date=trip_date,
                 movement_type='expense',
                 expense_category='other',
+                category=other_category,
                 amount=base_expense_value,
                 description=movement_desc,
                 is_auto_generated=True  # Marcar como automática
@@ -324,6 +360,7 @@ class Trip(models.Model):
                 date=trip_date,
                 movement_type='expense',
                 expense_category='fuel',
+                category=fuel_category,
                 amount=fuel_expense_value,
                 description='Combustível',
                 is_auto_generated=True  # Marcar como automática
