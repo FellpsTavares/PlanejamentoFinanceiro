@@ -25,6 +25,61 @@ def make_vehicle(tenant, plate='ABC1D23'):
     )
 
 
+class TripIsReceivedNotResetByExpenseMovementsTests(TestCase):
+    """
+    Regra: "Valor da viagem já recebido" é um campo de controle manual. Editar um
+    gasto da viagem (o que recria os lançamentos automáticos e, por sinal, chama
+    recalculate_from_movements()) não pode apagar essa marcação silenciosamente.
+    """
+
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.vehicle = make_vehicle(self.tenant)
+        self.trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            is_received=True,
+        )
+
+    def test_recalculate_from_movements_preserves_manually_set_is_received(self):
+        self.trip.recalculate_from_movements()
+        self.trip.refresh_from_db()
+        self.assertTrue(self.trip.is_received)
+
+    def test_editing_expense_fields_does_not_unmark_is_received(self):
+        # Simula o que acontece de verdade quando o usuário edita um gasto da
+        # viagem: sync_expense_movements() recria os lançamentos automáticos,
+        # o que dispara recalculate_from_movements() via sinal a cada
+        # criação/exclusão de TripMovement.
+        self.trip.base_expense_value = Decimal('50')
+        self.trip.fuel_expense_value = Decimal('30')
+        self.trip.save()
+        self.trip.sync_expense_movements()
+        self.trip.refresh_from_db()
+        self.assertTrue(self.trip.is_received)
+
+    def test_revenue_movement_still_promotes_is_received_to_true(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-06',
+            start_date='2026-09-06',
+            modality='per_ton',
+            tons=Decimal('5'),
+            rate_per_ton=Decimal('100'),
+            is_received=False,
+        )
+        TripMovement.objects.create(
+            trip=trip, date='2026-09-06', movement_type='revenue', amount=Decimal('500'),
+        )
+        trip.recalculate_from_movements()
+        trip.refresh_from_db()
+        self.assertTrue(trip.is_received)
+
+
 class TripEndDateDefaultTests(TestCase):
     """
     Regra: se a viagem não tiver data final informada, ela deve assumir a

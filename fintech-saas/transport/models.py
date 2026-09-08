@@ -222,7 +222,15 @@ class Trip(models.Model):
         other_expense_sum = self.movements.filter(movement_type='expense', expense_category='other').aggregate(total=Sum('amount'))['total'] or 0
         fuel_expense_sum = self.movements.filter(movement_type='expense', expense_category='fuel').aggregate(total=Sum('amount'))['total'] or 0
 
-        self.is_received = bool(revenue_sum > 0)
+        # "Valor da viagem já recebido" é um campo de controle manual (o usuário
+        # marca/desmarca na tela e salva) — este método só deve PROMOVER is_received
+        # para True quando existir um lançamento de receita (sinal adicional), nunca
+        # DEMOVER para False. Antes, `self.is_received = bool(revenue_sum > 0)`
+        # sobrescrevia incondicionalmente: como a receita da viagem normalmente vem
+        # do total_value (não de um lançamento tipo "Recebimento"), qualquer edição
+        # de gasto — que dispara este método via sinal ao recriar os lançamentos
+        # automáticos — apagava silenciosamente a marcação manual do usuário.
+        self.is_received = self.is_received or bool(revenue_sum > 0)
         self.base_expense_value = other_expense_sum
         self.fuel_expense_value = fuel_expense_sum
         self.expense_value = (self.base_expense_value or 0) + (self.fuel_expense_value or 0) + (self.driver_payment or 0)
