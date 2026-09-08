@@ -11,7 +11,7 @@ export default function AppHeader() {
   };
 
   const handleHome = () => {
-    navigate('/home');
+    navigate('/inicio');
   };
 
   const handleLogout = () => {
@@ -20,12 +20,12 @@ export default function AppHeader() {
   };
 
   const titleByPath = () => {
-    if (location.pathname.startsWith('/transport')) return 'Transportadora';
-    if (location.pathname.startsWith('/investments')) return 'Investimentos';
-    if (location.pathname.startsWith('/home')) return 'Home';
-    if (location.pathname.startsWith('/transactions/new')) return 'Nova Transação';
-    if (location.pathname.startsWith('/transactions')) return 'Transações';
-    if (location.pathname.startsWith('/settings')) return 'Configurações';
+    if (location.pathname.startsWith('/transportadora') || location.pathname.startsWith('/transport')) return 'Transportadora';
+    if (location.pathname.startsWith('/investimentos') || location.pathname.startsWith('/investments')) return 'Investimentos';
+    if (location.pathname.startsWith('/inicio') || location.pathname.startsWith('/home')) return 'Início';
+    if (location.pathname.startsWith('/transacoes/nova') || location.pathname.startsWith('/transactions/new')) return 'Nova Transação';
+    if (location.pathname.startsWith('/transacoes') || location.pathname.startsWith('/transactions')) return 'Transações';
+    if (location.pathname.startsWith('/configuracoes') || location.pathname.startsWith('/settings')) return 'Configurações';
     if (location.pathname.startsWith('/admin')) return 'Administração';
     return 'Elo Financeiro';
   };
