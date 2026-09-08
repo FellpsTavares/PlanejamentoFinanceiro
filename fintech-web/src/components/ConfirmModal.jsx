@@ -38,7 +38,13 @@ export default function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" onClick={onCancel} />
+      {/* Sem backdrop-blur aqui: o AppHeader (cabeçalho fixo no topo) também usa
+          backdrop-blur na sua pílula, e dois `backdrop-filter: blur()` sobrepostos
+          produzem um artefato de renderização no Chromium — uma faixa clara/branca
+          bem no topo, onde as duas áreas borradas se encontram. Os demais modais do
+          app (TransportTripModal, TransportEntryExpenseModal) já usam só um fundo
+          escuro semitransparente sem blur; seguimos o mesmo padrão aqui. */}
+      <div className="absolute inset-0 bg-gray-900/60" onClick={onCancel} />
       <div className="relative bg-white rounded-2xl shadow-xl border border-gray-100 z-10 max-w-sm w-full p-6 text-center">
         <div className={`mx-auto mb-4 flex items-center justify-center w-14 h-14 rounded-full ${v.iconBg} ${v.iconColor}`}>
           {v.icon}

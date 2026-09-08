@@ -48,7 +48,31 @@ class Category(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_('Ativo'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Criado em'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Atualizado em'))
-    
+
+    # Valor e descrição padrão do lançamento: só fazem sentido para categorias que
+    # geralmente têm preço fixo (ex.: pedágio, marcação de placa). Quando
+    # default_amount está preenchido, o valor é sugerido automaticamente ao lançar
+    # uma movimentação nessa categoria; quando vazio, o campo de valor fica em
+    # branco e o preenchimento passa a ser obrigatório na hora do lançamento.
+    default_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name=_('Valor padrão do lançamento'),
+    )
+    default_entry_description = models.CharField(
+        max_length=255, blank=True,
+        verbose_name=_('Descrição padrão do lançamento'),
+    )
+
+    # Marca categorias criadas automaticamente pelo sistema (ex.: as 3 categorias
+    # padrão do módulo de transporte: combustível, outros gastos e salário/comissão).
+    # Usado para mapear a categoria escolhida num lançamento de viagem para o bucket
+    # correto de agregação (fuel/other/driver) sem depender do nome da categoria,
+    # que o usuário pode editar livremente. Em branco = categoria comum/personalizada.
+    SYSTEM_KEY_FUEL = 'fuel'
+    SYSTEM_KEY_OTHER = 'other'
+    SYSTEM_KEY_SALARY = 'salary'
+    system_key = models.CharField(max_length=32, blank=True, default='', verbose_name=_('Chave do sistema'))
+
     class Meta:
         verbose_name = _('Categoria')
         verbose_name_plural = _('Categorias')

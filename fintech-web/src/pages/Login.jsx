@@ -97,9 +97,9 @@ export default function Login() {
     try {
       const result = await authService.login(formData.email, formData.password);
       if (result?.user?.must_change_password) {
-        navigate('/change-password');
+        navigate('/trocar-senha');
       } else {
-        navigate('/home');
+        navigate('/inicio');
       }
     } catch (err) {
       setError(err.response?.data?.detail || 'Erro ao fazer login');
@@ -116,7 +116,7 @@ export default function Login() {
     try {
       await authService.registerAccount(signupData);
       await authService.login(signupData.email, signupData.password);
-      navigate('/home');
+      navigate('/inicio');
     } catch (err) {
       const payload = err?.response?.data;
       if (typeof payload === 'string') {

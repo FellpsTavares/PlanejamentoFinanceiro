@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../services/api';
 import { investmentsMarketService } from '../services/investmentsMarket';
+import { todayLocalISO } from '../utils/format';
 
 export default function Investments() {
   const [investments, setInvestments] = useState([]);
@@ -210,7 +211,7 @@ export default function Investments() {
         ticker: (selectedAsset?.symbol || ticker).trim().toUpperCase(),
         buy_price: parseMoney(buyPrice),
         quantity: quantity,
-        buy_date: buyDate || new Date().toISOString().slice(0, 10),
+        buy_date: buyDate || todayLocalISO(),
       };
 
       await api.post('/investments/', payload);

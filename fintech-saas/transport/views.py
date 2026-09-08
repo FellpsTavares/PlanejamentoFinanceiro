@@ -325,7 +325,9 @@ class TripViewSet(viewsets.ModelViewSet):
         user = self.request.user
         tenant = getattr(user, 'tenant', None)
         if tenant:
-            return Trip.objects.filter(vehicle__tenant=tenant).order_by('-date', '-id')
+            # select_related('vehicle') evita uma query por viagem para resolver
+            # vehicle_plate/vehicle_model no serializer (N+1).
+            return Trip.objects.filter(vehicle__tenant=tenant).select_related('vehicle').order_by('-date', '-id')
         return Trip.objects.none()
 
     def list(self, request, *args, **kwargs):
@@ -356,14 +358,18 @@ class TripViewSet(viewsets.ModelViewSet):
         old_base_expense = instance.base_expense_value
         old_fuel_expense = instance.fuel_expense_value
         old_expense_items = instance.expense_items
-        
+        old_driver_payment = instance.driver_payment
+
         trip = serializer.save()
-        
+
         # Sincronizar gastos apenas se houve alteração nos campos de gastos
+        # (inclui driver_payment: o lançamento automático de Salário/Comissão
+        # também é gerado a partir dele em sync_expense_movements()).
         expense_fields_changed = (
             trip.base_expense_value != old_base_expense or
             trip.fuel_expense_value != old_fuel_expense or
-            trip.expense_items != old_expense_items
+            trip.expense_items != old_expense_items or
+            trip.driver_payment != old_driver_payment
         )
         
         if expense_fields_changed:
@@ -374,10 +380,10 @@ class TripViewSet(viewsets.ModelViewSet):
         trip = self.get_object()
 
         if request.method.lower() == 'get':
-            serializer = TripMovementSerializer(trip.movements.all(), many=True)
+            serializer = TripMovementSerializer(trip.movements.all().select_related('category'), many=True)
             return Response(serializer.data)
 
-        serializer = TripMovementSerializer(data=request.data)
+        serializer = TripMovementSerializer(data=request.data, context={'tenant': trip.vehicle.tenant})
         serializer.is_valid(raise_exception=True)
         serializer.save(trip=trip)
         trip.recalculate_from_movements()
@@ -395,7 +401,7 @@ class TripViewSet(viewsets.ModelViewSet):
             trip.recalculate_from_movements()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        serializer = TripMovementSerializer(movement, data=request.data, partial=True)
+        serializer = TripMovementSerializer(movement, data=request.data, partial=True, context={'tenant': trip.vehicle.tenant})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         trip.recalculate_from_movements()

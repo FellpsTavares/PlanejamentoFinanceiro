@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
 import LoadingOverlay from '../components/LoadingOverlay';
+import { formatApiDate } from '../utils/format';
 
 export default function TransportDashboard() {
   const [loading, setLoading] = useState(true);
@@ -68,10 +69,10 @@ export default function TransportDashboard() {
       <p className="mt-2 text-gray-600">Visão geral operacional e financeira.</p>
 
       <div className="mt-4 flex gap-2">
-        <Link to="/transport/vehicles" className="btn btn-secondary">Ver Veículos</Link>
-        <Link to="/transport/trips" className="btn btn-secondary">Gerenciar Viagens</Link>
-        <Link to="/transport/reports" className="btn btn-secondary">Relatórios</Link>
-        <Link to="/transport/trips/new" className="btn btn-primary">Nova Viagem</Link>
+        <Link to="/transportadora/veiculos" className="btn btn-secondary">Ver Veículos</Link>
+        <Link to="/transportadora/viagens" className="btn btn-secondary">Gerenciar Viagens</Link>
+        <Link to="/transportadora/relatorios" className="btn btn-secondary">Relatórios</Link>
+        <Link to="/transportadora/viagens/nova" className="btn btn-primary">Nova Viagem</Link>
       </div>
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -105,7 +106,7 @@ export default function TransportDashboard() {
           {recentTrips.map((trip) => (
             <li key={trip.id} className="p-3 border rounded flex justify-between items-center">
               <div>
-                <div className="font-semibold">{trip.start_date ? new Date(trip.start_date).toLocaleDateString('pt-BR') : (trip.date ? new Date(trip.date).toLocaleDateString('pt-BR') : '')}</div>
+                <div className="font-semibold">{formatApiDate(trip.start_date || trip.date, '')}</div>
                 <div className="text-sm text-gray-600">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'} • {trip.progress_type || 'Sem andamento'}</div>
                 <div className="text-xs text-gray-500">Gastos: {formatBRL(trip.expense_value)}</div>
               </div>

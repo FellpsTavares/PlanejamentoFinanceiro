@@ -93,3 +93,35 @@ export function formatQuantityDisplay(value) {
   const with3 = n.toFixed(3).replace(/\.?0+$/, '');
   return with3.replace('.', ',');
 }
+
+// Converte uma data "YYYY-MM-DD" (ou um valor que comece assim) vinda da API para o
+// formato BR "DD/MM/AAAA", sem passar por `new Date(string)`.
+//
+// Por quê: campos de data pura do backend (DateField do Django) chegam como string
+// "YYYY-MM-DD". `new Date('YYYY-MM-DD')` interpreta esse valor como meia-noite em UTC;
+// ao exibir com `.toLocaleDateString()` num fuso atrás de UTC (todo o Brasil), o dia
+// exibido volta um dia. Fazemos o parse manual da string em vez de construir um Date.
+export function formatApiDate(value, fallback = '—') {
+  if (!value) return fallback;
+  const s = String(value).slice(0, 10);
+  const parts = s.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  }
+  return String(value);
+}
+
+// Data de hoje no fuso horário local, no formato "YYYY-MM-DD" (para preencher valores
+// padrão de <input type="date"> e payloads enviados à API).
+//
+// Por quê: `new Date().toISOString().slice(0, 10)` converte o instante atual para UTC
+// antes de extrair a data; perto da meia-noite em fusos atrás de UTC (Brasil) isso pode
+// adiantar a data em um dia. Aqui usamos os componentes de data locais diretamente.
+export function todayLocalISO() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}

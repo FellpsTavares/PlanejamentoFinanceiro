@@ -3,11 +3,12 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { tenantParametersService } from '../services/tenantParameters';
+import { transactionService } from '../services/transactions';
 import { toast, extractApiError } from '../utils/toast';
 import CurrencyInput from '../components/CurrencyInput';
 import ConfirmModal from '../components/ConfirmModal';
 import ToggleSwitch from '../components/ToggleSwitch';
-import { formatDecimalString, formatQuantityDisplay, normalizeInputDecimal } from '../utils/format';
+import { formatDecimalString, formatQuantityDisplay, normalizeInputDecimal, formatApiDate, todayLocalISO } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
 const EMPTY_FUEL_FORM = {
@@ -35,7 +36,11 @@ export default function TransportTrips() {
 
   const [movementDate, setMovementDate] = useState('');
   const [movementType, setMovementType] = useState('expense');
-  const [movementExpenseCategory, setMovementExpenseCategory] = useState('fuel');
+  // Categoria configurável (finance.Category) escolhida para o lançamento —
+  // substituiu o enum fixo fuel/other. O padrão é a categoria "Outros Gastos"
+  // (ver applyDefaultMovementCategory), não mais Combustível.
+  const [movementCategoryId, setMovementCategoryId] = useState('');
+  const [expenseCategories, setExpenseCategories] = useState([]);
   const [movementAmount, setMovementAmount] = useState('');
   const [movementDescription, setMovementDescription] = useState('');
   const [editingMovementId, setEditingMovementId] = useState('');
@@ -53,7 +58,6 @@ export default function TransportTrips() {
   const [description, setDescription] = useState('');
   const [isReceived, setIsReceived] = useState(false);
   const [filterReceived, setFilterReceived] = useState('all'); // 'all' | 'received' | 'not_received'
-  const [filterText, setFilterText] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [vehicles, setVehicles] = useState([]);
@@ -61,7 +65,6 @@ export default function TransportTrips() {
   const [searching, setSearching] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showInProgressExpanded, setShowInProgressExpanded] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const parseMoney = (value) => {
     if (!value) return 0;
@@ -71,16 +74,6 @@ export default function TransportTrips() {
     return Number(str.replace(/\./g, '').replace(',', '.')) || 0;
   };
   const formatBRL = (value) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const formatApiDate = (value) => {
-    if (!value) return '—';
-    const s = String(value).slice(0, 10);
-    const parts = s.split('-');
-    if (parts.length === 3) {
-      const [y, m, d] = parts;
-      return `${d}/${m}/${y}`;
-    }
-    return value;
-  };
   const tripDateForFilter = (trip) => {
     const d = trip.start_date || trip.date || trip.end_date || '';
     return String(d).slice(0, 10);
@@ -97,18 +90,13 @@ export default function TransportTrips() {
   };
 
   const tripMatchesSearch = (trip) => {
-    // if a vehicle is explicitly selected, match exact plate
-    if (selectedVehicle && String(selectedVehicle).trim()) {
-      // selectedVehicle may be an id or a plate string depending on the UI; compare against known fields
-      const sel = String(selectedVehicle).trim();
-      const vehicleId = String(trip.vehicle_id || trip.vehicle || '').trim();
-      const plate = String(trip.vehicle_plate || '').trim();
-      return vehicleId === sel || plate === sel;
-    }
-    if (!searchQuery || !String(searchQuery).trim()) return true;
-    const q = String(searchQuery).toLowerCase().trim();
-    const plate = String(trip.vehicle_plate || '').toLowerCase();
-    return plate.includes(q);
+    // Filtro por veículo selecionado (a busca por texto/placa foi removida:
+    // a seleção de veículo já cobre esse caso e evita erro de digitação na placa).
+    if (!selectedVehicle || !String(selectedVehicle).trim()) return true;
+    const sel = String(selectedVehicle).trim();
+    const vehicleId = String(trip.vehicle_id || trip.vehicle || '').trim();
+    const plate = String(trip.vehicle_plate || '').trim();
+    return vehicleId === sel || plate === sel;
   };
 
   const loadTrips = async (params = {}) => {
@@ -164,6 +152,29 @@ export default function TransportTrips() {
     }
   };
 
+  // Categorias de despesa configuráveis em Configurações > Categorias (usadas nos
+  // lançamentos da viagem). Semeadas automaticamente por tenant: Combustível,
+  // Outros Gastos e Salário/Comissão, mais quaisquer categorias personalizadas.
+  const loadExpenseCategories = async () => {
+    try {
+      const data = await transactionService.getCategoriesByType();
+      setExpenseCategories(data?.expense || []);
+    } catch (err) {
+      console.error('Erro ao carregar categorias de despesa', err);
+    }
+  };
+
+  const findCategoryBySystemKey = (key) => expenseCategories.find((c) => c.system_key === key);
+
+  // Categoria padrão do lançamento manual: "Outros Gastos" (não mais Combustível).
+  // Se, por algum motivo, essa categoria padrão ainda não tiver sido carregada,
+  // cai para a primeira categoria de despesa disponível.
+  const defaultMovementCategoryId = () => {
+    const other = findCategoryBySystemKey('other');
+    if (other) return String(other.id);
+    return expenseCategories[0] ? String(expenseCategories[0].id) : '';
+  };
+
   const loadTripMovements = async (tripId) => {
     if (!tripId) {
       setTripMovements([]);
@@ -182,7 +193,18 @@ export default function TransportTrips() {
     loadTrips();
     loadTransportSettings();
     loadVehicles();
+    loadExpenseCategories();
   }, [searchParams]);
+
+  // Preenche a categoria padrão assim que as categorias carregarem, caso nenhuma
+  // já tenha sido escolhida (cobre o caso de a lista de categorias chegar depois
+  // da seleção da viagem).
+  useEffect(() => {
+    if (!movementCategoryId && expenseCategories.length > 0) {
+      setMovementCategoryId(defaultMovementCategoryId());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseCategories]);
 
   // auto-run search when selected vehicle or received filter changes
   useEffect(() => {
@@ -230,7 +252,7 @@ export default function TransportTrips() {
     setIsReceived(Boolean(trip.is_received));
     setMovementDate(trip.start_date || trip.date || '');
     setMovementType('expense');
-    setMovementExpenseCategory('fuel');
+    setMovementCategoryId(defaultMovementCategoryId());
     setMovementAmount('');
     setMovementDescription('');
     setEditingMovementId('');
@@ -275,7 +297,10 @@ export default function TransportTrips() {
       setSaving(true);
       const payload = {
         start_date: startDate || null,
-        end_date: endDate || new Date().toISOString().slice(0, 10),
+        // Se a data final não foi informada, considera igual à data de início
+        // (o backend também garante essa regra, mas replicamos aqui para refletir
+        // o valor correto imediatamente na tela sem esperar o reload).
+        end_date: endDate || startDate || todayLocalISO(),
         progress_type: progressType || '',
         initial_km: initialKm === '' ? null : Number(initialKm),
         final_km: finalKm === '' ? null : Number(finalKm),
@@ -315,10 +340,17 @@ export default function TransportTrips() {
 
   const handleAddMovement = async () => {
     if (!selectedTrip) return;
-    const requiresDescription = !(movementType === 'expense' && movementExpenseCategory === 'fuel');
+    const selectedCategory = expenseCategories.find((c) => String(c.id) === String(movementCategoryId));
+    // Descrição é obrigatória, exceto para combustível ou categorias que já têm
+    // uma descrição padrão configurada (Configurações > Categorias) — mesma regra
+    // aplicada no backend (TripMovementSerializer.validate).
+    const requiresDescription = !(
+      movementType === 'expense'
+      && (selectedCategory?.system_key === 'fuel' || Boolean(selectedCategory?.default_entry_description))
+    );
 
-    if (!movementDate || !movementAmount || (requiresDescription && !movementDescription.trim())) {
-      toast('Informe data e valor. Descrição é obrigatória exceto para combustível.', 'error');
+    if (!movementDate || !movementAmount || (movementType === 'expense' && !movementCategoryId) || (requiresDescription && !movementDescription.trim())) {
+      toast('Informe data, categoria e valor. Descrição é obrigatória, exceto quando a categoria já tem uma padrão.', 'error');
       return;
     }
 
@@ -327,7 +359,7 @@ export default function TransportTrips() {
       const payload = {
         date: movementDate,
         movement_type: movementType,
-        expense_category: movementType === 'expense' ? movementExpenseCategory : '',
+        category: movementType === 'expense' ? movementCategoryId : null,
         amount: parseMoney(movementAmount),
         description: movementDescription.trim(),
       };
@@ -344,7 +376,7 @@ export default function TransportTrips() {
       setMovementDescription('');
       setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
       setMovementType('expense');
-      setMovementExpenseCategory('fuel');
+      setMovementCategoryId(defaultMovementCategoryId());
       setEditingMovementId('');
       await loadTripMovements(selectedTrip.id);
       const refreshedTrip = await transportService.getTrip(selectedTrip.id);
@@ -404,7 +436,7 @@ export default function TransportTrips() {
       await transportService.createTripMovement(selectedTrip.id, {
         date: fuelForm.date,
         movement_type: 'expense',
-        expense_category: 'fuel',
+        category: findCategoryBySystemKey('fuel')?.id,
         amount: expenseAmount,
         description: `Abastecimento (${fuelForm.fuel_type === 'diesel' ? 'Diesel' : 'Arla'}) — ${formatQuantityDisplay(liters)} L`,
       });
@@ -426,7 +458,7 @@ export default function TransportTrips() {
     setEditingMovementId(String(movement.id));
     setMovementDate(movement.date);
     setMovementType(movement.movement_type);
-    setMovementExpenseCategory(movement.expense_category || 'fuel');
+    setMovementCategoryId(movement.category ? String(movement.category) : defaultMovementCategoryId());
     // CurrencyInput (Cleave) espera vírgula decimal/ponto de milhar (formato BR);
     // a API retorna o valor com ponto decimal cru.
     setMovementAmount(movement.amount != null ? formatDecimalString(movement.amount, 2) : '');
@@ -444,7 +476,7 @@ export default function TransportTrips() {
         setEditingMovementId('');
         setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
         setMovementType('expense');
-        setMovementExpenseCategory('fuel');
+        setMovementCategoryId(defaultMovementCategoryId());
         setMovementAmount('');
         setMovementDescription('');
       }
@@ -470,7 +502,7 @@ export default function TransportTrips() {
           <h1 className="text-2xl font-bold">Gerenciar Viagens</h1>
           <p className="text-sm text-gray-600">Acompanhe viagens em andamento e faça lançamentos enquanto estão em curso.</p>
         </div>
-        <Link to="/transport/trips/new" className="btn btn-primary">Nova Viagem</Link>
+        <Link to="/transportadora/viagens/nova" className="btn btn-primary">Nova Viagem</Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -479,14 +511,17 @@ export default function TransportTrips() {
               espaço vertical acima da lista de viagens quando não estão em uso. */}
           <div className="mb-4">
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                aria-label="Buscar por placa"
-                placeholder="Buscar por placa..."
+              <select
+                aria-label="Selecionar veículo"
                 className="input input-sm flex-1"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+                value={selectedVehicle}
+                onChange={(e) => setSelectedVehicle(e.target.value)}
+              >
+                <option value="">Todos os veículos</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
+                ))}
+              </select>
               <button
                 type="button"
                 className={`h-9 px-3 rounded-md border flex items-center gap-1.5 text-sm font-medium ${filtersOpen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
@@ -529,19 +564,7 @@ export default function TransportTrips() {
 
                   <div className="flex items-center gap-2">
                     <div className="w-full sm:w-auto">
-                      <label className="sr-only">Veículo</label>
                       <div className="flex items-center gap-2">
-                        <select
-                          aria-label="Selecionar veículo"
-                          className="input input-sm w-full sm:w-40"
-                          value={selectedVehicle}
-                          onChange={(e) => setSelectedVehicle(e.target.value)}
-                        >
-                          <option value="">Todos os veículos</option>
-                          {vehicles.map((v) => (
-                            <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
-                          ))}
-                        </select>
                         <select
                           aria-label="Filtrar por recebido"
                           className="input input-sm w-full sm:w-36"
@@ -591,7 +614,6 @@ export default function TransportTrips() {
                             setSelectedVehicle('');
                             setFilterStartDate('');
                             setFilterEndDate('');
-                            setSearchQuery('');
                             setFilterReceived('all');
                             await loadTrips();
                           }}
@@ -688,10 +710,28 @@ export default function TransportTrips() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => navigate(`/transport/trips/new?trip=${selectedTrip.id}`)}
+                  onClick={() => navigate(`/transportadora/viagens/nova?trip=${selectedTrip.id}`)}
                 >
                   Abrir edição completa
                 </button>
+              </div>
+
+              {/* Veículo e dados da carga em destaque */}
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Veículo</div>
+                  <div className="text-lg font-bold text-blue-900">{selectedTrip.vehicle_plate || '—'}</div>
+                  {selectedTrip.vehicle_model && (
+                    <div className="text-sm text-blue-800">{selectedTrip.vehicle_model}</div>
+                  )}
+                </div>
+                {selectedTrip.modality === 'per_ton' && (
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Valor por tonelada</div>
+                    <div className="text-lg font-bold text-blue-900">{formatBRL(selectedTrip.rate_per_ton)}</div>
+                    <div className="text-sm text-blue-800">{formatQuantityDisplay(selectedTrip.tons)} ton informadas</div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
@@ -793,9 +833,29 @@ export default function TransportTrips() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium">Categoria</label>
-                        <select className="input-field w-full" value={movementExpenseCategory} onChange={(e) => setMovementExpenseCategory(e.target.value)} disabled={selectedTrip.status !== 'in_progress' || movementType !== 'expense'}>
-                          <option value="fuel">Combustível</option>
-                          <option value="other">Outros gastos</option>
+                        <select
+                          className="input-field w-full"
+                          value={movementCategoryId}
+                          onChange={(e) => {
+                            const categoryId = e.target.value;
+                            setMovementCategoryId(categoryId);
+                            // Categorias de preço fixo (ex.: pedágio) podem trazer valor e
+                            // descrição padrão configurados em Configurações > Categorias;
+                            // preenchemos automaticamente, mas o usuário ainda pode ajustar.
+                            const category = expenseCategories.find((c) => String(c.id) === String(categoryId));
+                            if (category?.default_amount != null) {
+                              setMovementAmount(formatDecimalString(category.default_amount, 2));
+                            }
+                            if (category?.default_entry_description) {
+                              setMovementDescription(category.default_entry_description);
+                            }
+                          }}
+                          disabled={selectedTrip.status !== 'in_progress' || movementType !== 'expense'}
+                        >
+                          <option value="">Selecione...</option>
+                          {expenseCategories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
                         </select>
                       </div>
                       <div>
@@ -806,7 +866,7 @@ export default function TransportTrips() {
 
                     <div>
                       <label className="block text-sm font-medium">Descrição do gasto/recebimento</label>
-                      <input className="input-field w-full" value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} placeholder="Opcional para combustível. Obrigatória para os demais." />
+                      <input className="input-field w-full" value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} placeholder="Opcional para combustível ou categorias com descrição padrão. Obrigatória para os demais." />
                     </div>
 
                     <div className="flex flex-wrap gap-2">
@@ -821,7 +881,7 @@ export default function TransportTrips() {
                             setEditingMovementId('');
                             setMovementDate(selectedTrip.start_date || selectedTrip.date || '');
                             setMovementType('expense');
-                            setMovementExpenseCategory('fuel');
+                            setMovementCategoryId(defaultMovementCategoryId());
                             setMovementAmount('');
                             setMovementDescription('');
                           }}
@@ -910,9 +970,9 @@ export default function TransportTrips() {
                   ) : tripMovements.map((movement) => (
                     <div key={movement.id} className="border rounded p-2 text-sm flex items-center justify-between gap-2">
                       <div>
-                        <div className="font-medium">{movement.movement_type === 'expense' ? 'Gasto' : 'Recebimento'} {movement.expense_category === 'fuel' ? '• Combustível' : movement.expense_category === 'other' ? '• Outros' : ''}</div>
+                        <div className="font-medium">{movement.movement_type === 'expense' ? 'Gasto' : 'Recebimento'} {movement.category_name ? `• ${movement.category_name}` : ''}</div>
                         <div className="text-gray-600">{movement.description || 'Sem descrição'}</div>
-                        <div className="text-xs text-gray-500">{new Date(movement.date).toLocaleDateString('pt-BR')}</div>
+                        <div className="text-xs text-gray-500">{formatApiDate(movement.date, '')}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className={`font-semibold ${movement.movement_type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>

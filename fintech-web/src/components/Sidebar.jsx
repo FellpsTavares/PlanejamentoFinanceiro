@@ -13,11 +13,11 @@ export default function Sidebar() {
         key: 'initial',
         label: 'Finanças',
         icon: '💳',
-        active: location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/transactions'),
+        active: location.pathname.startsWith('/painel') || location.pathname.startsWith('/transacoes'),
         items: [
-          { to: '/dashboard', label: 'Painel' },
-          { to: '/transactions', label: 'Transações' },
-          { to: '/transactions/new', label: 'Nova Transação' },
+          { to: '/painel', label: 'Painel' },
+          { to: '/transacoes', label: 'Transações' },
+          { to: '/transacoes/nova', label: 'Nova Transação' },
         ],
       },
     ];
@@ -27,11 +27,11 @@ export default function Sidebar() {
         key: 'investments',
         label: 'Investimentos',
         icon: '📈',
-        active: location.pathname.startsWith('/investments'),
+        active: location.pathname.startsWith('/investimentos'),
         items: [
-          { to: '/investments/dashboard', label: 'Painel' },
-          { to: '/investments', label: 'Ativos' },
-          { to: '/investments/recommendations', label: 'Ativos Indicados' },
+          { to: '/investimentos/painel', label: 'Painel' },
+          { to: '/investimentos', label: 'Ativos' },
+          { to: '/investimentos/indicados', label: 'Ativos Indicados' },
         ],
       });
     }
@@ -41,29 +41,29 @@ export default function Sidebar() {
         key: 'transport',
         label: 'Transportadora',
         icon: '🚚',
-        active: location.pathname.startsWith('/transport'),
+        active: location.pathname.startsWith('/transportadora'),
         items: [
-          { to: '/transport/dashboard', label: 'Painel' },
-          { to: '/transport/trips', label: 'Gerenciar Viagens' },
-          { to: '/transport/vehicles', label: 'Veículos' },
-          { to: '/transport/drivers', label: 'Motoristas' },
-          { to: '/transport/maintenance', label: 'Manutenção' },
-          { to: '/transport/fuel-refills', label: 'Abastecimento' },
+          { to: '/transportadora/painel', label: 'Painel' },
+          { to: '/transportadora/viagens', label: 'Gerenciar Viagens' },
+          { to: '/transportadora/veiculos', label: 'Veículos' },
+          { to: '/transportadora/motoristas', label: 'Motoristas' },
+          { to: '/transportadora/manutencao', label: 'Manutenção' },
+          { to: '/transportadora/abastecimento', label: 'Abastecimento' },
         ],
       });
     }
 
-    const settingsItems = [{ to: '/settings/modules', label: 'Configurações' }];
+    const settingsItems = [{ to: '/configuracoes', label: 'Configurações' }];
     // Removido item "Admin Tenants" — funcionalidade removida para manter código limpo
     if (user?.is_superuser) {
-      settingsItems.push({ to: '/admin/user-management', label: 'Gerenciar Usuários' });
+      settingsItems.push({ to: '/admin/usuarios', label: 'Gerenciar Usuários' });
     }
 
     list.push({
       key: 'settings',
       label: 'Configurações',
       icon: '⚙',
-      active: location.pathname.startsWith('/settings') || location.pathname.startsWith('/admin/user-management'),
+      active: location.pathname.startsWith('/configuracoes') || location.pathname.startsWith('/admin/usuarios'),
       items: settingsItems,
     });
 

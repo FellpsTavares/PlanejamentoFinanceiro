@@ -129,7 +129,9 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         vehicle: vehicleId,
         date: startDate,
         start_date: startDate,
-        end_date: endDate || null,
+        // Se a data final não foi informada, considera igual à data de início
+        // (o backend também garante essa regra em Trip.save()).
+        end_date: endDate || startDate || null,
         modality,
         progress_type: progressType,
         description,
@@ -165,7 +167,7 @@ export default function TransportTripModal({ open, onClose, vehicleId, initial, 
         if (onSaved) await onSaved();
         // redireciona para gerenciar viagens com a nova viagem pré-selecionada
         if (created && created.id) {
-          navigate(`/transport/trips?trip=${created.id}`);
+          navigate(`/transportadora/viagens?trip=${created.id}`);
         } else {
           onClose();
         }

@@ -210,6 +210,13 @@ class Trip(models.Model):
     def __str__(self):
         return f"{self.vehicle} - {self.modality} - {self.total_value} ({self.date})"
 
+    def save(self, *args, **kwargs):
+        # Se a data final não foi informada, considera igual à data de início
+        # (aplicado aqui para valer em qualquer via de entrada: API, admin, comandos).
+        if not self.end_date and self.start_date:
+            self.end_date = self.start_date
+        super().save(*args, **kwargs)
+
     def recalculate_from_movements(self):
         revenue_sum = self.movements.filter(movement_type='revenue').aggregate(total=Sum('amount'))['total'] or 0
         other_expense_sum = self.movements.filter(movement_type='expense', expense_category='other').aggregate(total=Sum('amount'))['total'] or 0
@@ -294,7 +301,31 @@ class Trip(models.Model):
                 description='Combustível',
                 is_auto_generated=True  # Marcar como automática
             )
-        
+
+        # 4. Criar movement do pagamento ao motorista, na categoria Salário/Comissão
+        # (criada automaticamente para o tenant caso ainda não exista). Esse
+        # movimento é só um registro/espelho para relatórios e para a categoria
+        # aparecer nos lançamentos da viagem — o valor de driver_payment continua
+        # sendo a fonte da verdade para o cálculo de expense_value (ver
+        # TripSerializer._compute_values), então esse movimento NÃO entra no bucket
+        # 'other' somado por recalculate_from_movements (ficaria contado em dobro).
+        if self.driver_payment and self.driver_payment > 0 and self.vehicle_id:
+            from finance.defaults import ensure_default_category
+            from finance.models import Category
+
+            salary_category = ensure_default_category(self.vehicle.tenant, Category.SYSTEM_KEY_SALARY)
+            driver_desc = f'Pagamento ao motorista{f" ({self.driver.name})" if self.driver_id else ""}'
+            TripMovement.objects.create(
+                trip=self,
+                date=trip_date,
+                movement_type='expense',
+                expense_category='driver',
+                category=salary_category,
+                amount=self.driver_payment,
+                description=driver_desc,
+                is_auto_generated=True,
+            )
+
         # Limpar o marcador [GASTO:...] do campo description
         if self.description and '[GASTO:' in self.description:
             self.description = re.sub(r'\s*\[GASTO:[^\]]+\]', '', self.description).strip()
@@ -307,15 +338,26 @@ class TripMovement(models.Model):
         ('revenue', 'Recebimento'),
     )
 
+    # Buckets de agregação usados por Trip.recalculate_from_movements() para somar
+    # base_expense_value/fuel_expense_value. 'driver' é só um marcador de exibição:
+    # o pagamento ao motorista continua vindo do campo Trip.driver_payment (ver
+    # TripSerializer._compute_values), não é somado a partir daqui.
     EXPENSE_CATEGORY_CHOICES = (
         ('fuel', 'Combustível'),
         ('other', 'Outros gastos'),
+        ('driver', 'Salário/Comissão'),
     )
 
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE, related_name='movements')
     date = models.DateField()
     movement_type = models.CharField(max_length=20, choices=MOVEMENT_TYPE_CHOICES)
     expense_category = models.CharField(max_length=20, choices=EXPENSE_CATEGORY_CHOICES, blank=True, default='')
+    # Categoria configurável (Configurações > Categorias) escolhida para este
+    # lançamento. Pode ser nula em lançamentos antigos (antes desse campo existir)
+    # ou quando a categoria correspondente foi excluída (SET_NULL).
+    category = models.ForeignKey(
+        'finance.Category', null=True, blank=True, on_delete=models.SET_NULL, related_name='trip_movements',
+    )
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     description = models.CharField(max_length=255, blank=True, default='')
     is_auto_generated = models.BooleanField(default=False, help_text='Indica se esta movimentação foi criada automaticamente pelo sistema')

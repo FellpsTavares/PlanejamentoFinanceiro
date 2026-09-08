@@ -52,7 +52,7 @@ export default function ChangePassword() {
       }
 
       toast('Senha alterada com sucesso!', 'success');
-      navigate('/home');
+      navigate('/inicio');
     } catch (err) {
       const data = err?.response?.data;
       const detail =

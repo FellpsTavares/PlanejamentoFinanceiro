@@ -47,7 +47,7 @@ export default function TransportVehicleNew() {
       const v = await transportService.createVehicle(payload);
       // navegar somente se id presente
       if (v && v.id) {
-        navigate(`/transport/vehicles/${v.id}`);
+        navigate(`/transportadora/veiculos/${v.id}`);
       } else {
         console.warn('Resposta inesperada ao criar veículo:', v);
         setError('Resposta inesperada do servidor. Verifique o console.');

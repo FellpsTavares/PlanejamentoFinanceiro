@@ -78,9 +78,9 @@ export default function Home() {
       title: 'Finanças',
       description: 'Acesse transações e visão financeira principal.',
       links: [
-        { to: '/dashboard', label: 'Painel' },
-        { to: '/transactions', label: 'Transações' },
-        { to: '/transactions/new', label: 'Nova Transação' },
+        { to: '/painel', label: 'Painel' },
+        { to: '/transacoes', label: 'Transações' },
+        { to: '/transacoes/nova', label: 'Nova Transação' },
       ],
       enabled: true,
     },
@@ -89,9 +89,9 @@ export default function Home() {
       title: 'Transportadora',
       description: 'Gerencie veículos, viagens e receitas.',
       links: [
-        { to: '/transport/dashboard', label: 'Painel' },
-        { to: '/transport/trips', label: 'Gerenciar Viagens' },
-        { to: '/transport/vehicles', label: 'Veículos' },
+        { to: '/transportadora/painel', label: 'Painel' },
+        { to: '/transportadora/viagens', label: 'Gerenciar Viagens' },
+        { to: '/transportadora/veiculos', label: 'Veículos' },
       ],
       enabled: Boolean(user?.tenant?.has_module_transport),
     },
@@ -100,8 +100,8 @@ export default function Home() {
       title: 'Investimentos',
       description: 'Acompanhe carteira e indicadores de ativos.',
       links: [
-        { to: '/investments/dashboard', label: 'Painel' },
-        { to: '/investments', label: 'Ativos' },
+        { to: '/investimentos/painel', label: 'Painel' },
+        { to: '/investimentos', label: 'Ativos' },
       ],
       enabled: Boolean(user?.tenant?.has_module_investments),
     },
@@ -110,7 +110,7 @@ export default function Home() {
       title: 'Configurações',
       description: 'Ajuste parâmetros gerais e por módulo.',
       links: [
-        { to: '/settings/modules', label: 'Configurações' },
+        { to: '/configuracoes', label: 'Configurações' },
       ],
       enabled: true,
     },
@@ -162,7 +162,7 @@ export default function Home() {
 
             {['initial', 'transport', 'investments'].includes(module.key) && (
               <div className="mt-6">
-                <Link to={`/reports?module=${module.key}`} className="btn btn-primary">
+                <Link to={`/relatorios?module=${module.key}`} className="btn btn-primary">
                   Ir para Relatórios
                 </Link>
               </div>

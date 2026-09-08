@@ -4,7 +4,7 @@ from .models import RecurringTransaction, Transaction
 from accounts.models import Tenant
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
-from .defaults import ensure_default_payment_methods
+from .defaults import ensure_default_payment_methods, ensure_default_categories
 
 
 @receiver(post_save, sender=RecurringTransaction)
@@ -46,3 +46,4 @@ def create_default_payment_methods_for_tenant(sender, instance, created, **kwarg
         return
 
     ensure_default_payment_methods(instance)
+    ensure_default_categories(instance)

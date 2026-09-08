@@ -9,7 +9,7 @@ import TransportTripModal from '../components/TransportTripModal';
 import CurrencyInput from '../components/CurrencyInput';
 import ToggleSwitch from '../components/ToggleSwitch';
 import { toast, extractApiError } from '../utils/toast';
-import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal } from '../utils/format';
+import { formatDecimalStringToBRL, formatDecimalString, normalizeInputDecimal, formatApiDate, todayLocalISO } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
 const MAX_AXLES_ALLOWED = 12;
@@ -97,7 +97,7 @@ export default function TransportVehicleProfile() {
     autoCalcPaidValue: true,
   });
 
-  const [slotRegistrationDate, setSlotRegistrationDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [slotRegistrationDate, setSlotRegistrationDate] = useState(() => todayLocalISO());
   const [currentTireMap, setCurrentTireMap] = useState({});
   const [rotateSource, setRotateSource] = useState('');
   const [rotateTarget, setRotateTarget] = useState('');
@@ -448,7 +448,7 @@ export default function TransportVehicleProfile() {
             {revenues.map((r) => (
               <li key={r.id} className="p-3 border rounded flex justify-between items-center">
                 <div>
-                  <div className="font-semibold">{r.date ? new Date(r.date).toLocaleDateString('pt-BR') : ''} — {formatBRL(r.amount)}</div>
+                  <div className="font-semibold">{formatApiDate(r.date, '')} — {formatBRL(r.amount)}</div>
                   <div className="text-sm text-gray-600">{r.description}</div>
                 </div>
                 <div>
@@ -469,7 +469,7 @@ export default function TransportVehicleProfile() {
             {expenses.map((r) => (
               <li key={r.id} className="p-3 border rounded flex justify-between items-center">
                 <div>
-                  <div className="font-semibold">{r.date ? new Date(r.date).toLocaleDateString('pt-BR') : ''} — {formatBRL(r.amount)}</div>
+                  <div className="font-semibold">{formatApiDate(r.date, '')} — {formatBRL(r.amount)}</div>
                   <div className="text-sm text-gray-600">{r.description} {r.category ? `• ${r.category}` : ''}</div>
                 </div>
                 <div>
@@ -800,7 +800,7 @@ export default function TransportVehicleProfile() {
               <ul className="space-y-2">
                 {maintenanceLogs.map((m) => (
                   <li key={m.id} className="border rounded p-3">
-                    <div className="font-semibold">{new Date(m.date).toLocaleDateString('pt-BR')} • KM {formatNumber(m.odometer_at_maintenance, 0, 0)}</div>
+                    <div className="font-semibold">{formatApiDate(m.date, '')} • KM {formatNumber(m.odometer_at_maintenance, 0, 0)}</div>
                     <div className="text-sm text-gray-600">{m.description}</div>
                     {m.oil_change && (
                       <div className="text-sm text-blue-700 mt-1">
@@ -883,7 +883,7 @@ export default function TransportVehicleProfile() {
                 {fuelLogs.map((f) => (
                   <li key={f.id} className="border rounded p-3 flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-semibold">{new Date(f.date).toLocaleDateString('pt-BR')} • {f.fuel_type_display} • KM {formatNumber(f.odometer_km, 0, 0)}</div>
+                      <div className="font-semibold">{formatApiDate(f.date, '')} • {f.fuel_type_display} • KM {formatNumber(f.odometer_km, 0, 0)}</div>
                       <div className="text-sm text-gray-600">{formatNumber(f.liters, 0, 3)} L • {formatBRL(f.paid_value)}{Number(f.discount) > 0 ? ` (desconto ${formatBRL(f.discount)})` : ''}</div>
                     </div>
                     <button className="btn btn-sm btn-danger" onClick={() => { setConfirmPayload({ kind: 'fuel', id: f.id }); setConfirmOpen(true); }}>Excluir</button>

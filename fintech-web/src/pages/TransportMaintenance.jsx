@@ -91,19 +91,19 @@ export default function TransportMaintenance() {
 
       {/* Navegação para sub-seções */}
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to="/transport/maintenance/preventive" className="p-5 border rounded bg-white hover:border-blue-400 hover:shadow transition-shadow">
+        <Link to="/transportadora/manutencao/preventiva" className="p-5 border rounded bg-white hover:border-blue-400 hover:shadow transition-shadow">
           <div className="text-lg font-semibold text-blue-700">🔧 Preventiva</div>
           <div className="text-sm text-gray-500 mt-1">Planos por tempo/km: óleo, filtros, correias, radiador e mais.</div>
         </Link>
-        <Link to="/transport/maintenance/predictive" className="p-5 border rounded bg-white hover:border-orange-400 hover:shadow transition-shadow">
+        <Link to="/transportadora/manutencao/preditiva" className="p-5 border rounded bg-white hover:border-orange-400 hover:shadow transition-shadow">
           <div className="text-lg font-semibold text-orange-600">📊 Preditiva</div>
           <div className="text-sm text-gray-500 mt-1">Monitoramento de condição: pneus, freios, bateria e análise de óleo.</div>
         </Link>
-        <Link to="/transport/maintenance/corrective" className="p-5 border rounded bg-white hover:border-red-400 hover:shadow transition-shadow">
+        <Link to="/transportadora/manutencao/corretiva" className="p-5 border rounded bg-white hover:border-red-400 hover:shadow transition-shadow">
           <div className="text-lg font-semibold text-red-600">🚨 Corretiva</div>
           <div className="text-sm text-gray-500 mt-1">Falhas e reparos: emergências, paliativas, MTTR e custo.</div>
         </Link>
-        <Link to="/transport/maintenance/checklist" className="p-5 border rounded bg-white hover:border-green-400 hover:shadow transition-shadow">
+        <Link to="/transportadora/manutencao/checklist" className="p-5 border rounded bg-white hover:border-green-400 hover:shadow transition-shadow">
           <div className="text-lg font-semibold text-green-700">✅ Checklist</div>
           <div className="text-sm text-gray-500 mt-1">Cronotacógrafo, iluminação, extintor e equipamentos de segurança.</div>
         </Link>

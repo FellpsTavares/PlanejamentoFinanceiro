@@ -10,9 +10,10 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = [
             'id', 'name', 'description', 'type', 'color', 'icon',
+            'default_amount', 'default_entry_description', 'system_key',
             'is_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'system_key']
 
     def create(self, validated_data):
         # tenant deve ser atribuído pela view (segurança)

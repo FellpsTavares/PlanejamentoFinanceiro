@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { transactionService } from '../services/transactions';
 import { authService } from '../services/auth';
 import ConfirmModal from '../components/ConfirmModal';
+import { formatApiDate, todayLocalISO } from '../utils/format';
 
 export default function Transactions() {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ export default function Transactions() {
   };
 
   const handleMarkInvoicePaid = async (invoiceId) => {
-    const paidAt = new Date().toISOString().split('T')[0];
+    const paidAt = todayLocalISO();
     try {
       await transactionService.markCreditCardInvoicePaid(invoiceId, paidAt);
       await loadData();
@@ -116,7 +117,7 @@ export default function Transactions() {
         <div className="mb-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Transações</h1>
           <button
-            onClick={() => navigate('/transactions/new')}
+            onClick={() => navigate('/transacoes/nova')}
             className="btn-primary"
           >
             Nova Transação
@@ -224,8 +225,8 @@ export default function Transactions() {
                   {creditCardInvoices.map((invoice) => (
                     <tr key={invoice.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-900">{invoice.payment_method_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{new Date(invoice.reference_month).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{new Date(invoice.due_date).toLocaleDateString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{formatApiDate(invoice.reference_month, '').slice(3) || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{formatApiDate(invoice.due_date)}</td>
                       <td className="px-4 py-3 text-sm text-right font-semibold text-red-600">{formatBRL(invoice.total_amount)}</td>
                       <td className="px-4 py-3 text-sm">
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
@@ -291,7 +292,7 @@ export default function Transactions() {
                   {transactions.map((transaction) => (
                     <tr key={transaction.id} className="border-b hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-900">
-                        {new Date(transaction.transaction_date).toLocaleDateString('pt-BR')}
+                        {formatApiDate(transaction.transaction_date)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">
                         {transaction.description}

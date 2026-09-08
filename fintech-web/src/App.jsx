@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { authService } from './services/auth';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -36,12 +36,19 @@ import ChangePassword from './pages/ChangePassword';
 import Reports from './pages/Reports';
  
 
+// Redireciona a antiga rota em inglês de perfil de veículo (com :id) para a nova
+// rota em português, preservando o id do veículo.
+function LegacyVehicleProfileRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/transportadora/veiculos/${id}`} replace />;
+}
+
 function ChatFloatingButton() {
   const [chatOpen, setChatOpen] = useState(false);
   const location = useLocation();
   const isAuthenticated = authService.isAuthenticated();
   const isLoginPage = location.pathname === '/login';
-  const isChangePasswordPage = location.pathname === '/change-password';
+  const isChangePasswordPage = location.pathname === '/trocar-senha' || location.pathname === '/change-password';
 
   // Não mostrar botão na página de login ou troca de senha
   if (!isAuthenticated || isLoginPage || isChangePasswordPage) {
@@ -81,11 +88,11 @@ export default function App() {
         <Route path="/login" element={<Login />} />
 
         {/* Rota de troca de senha forçada (sem sidebar) */}
-        <Route path="/change-password" element={<ChangePassword />} />
+        <Route path="/trocar-senha" element={<ChangePassword />} />
 
         {/* Rotas Protegidas */}
         <Route
-          path="/home"
+          path="/inicio"
           element={
             <ProtectedRoute>
               <Home />
@@ -93,7 +100,7 @@ export default function App() {
           }
         />
         <Route
-          path="/dashboard"
+          path="/painel"
           element={
             <ProtectedRoute>
               <Dashboard />
@@ -101,7 +108,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transactions"
+          path="/transacoes"
           element={
             <ProtectedRoute>
               <Transactions />
@@ -109,7 +116,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transactions/new"
+          path="/transacoes/nova"
           element={
             <ProtectedRoute>
               <NewTransaction />
@@ -117,7 +124,7 @@ export default function App() {
           }
         />
         <Route
-          path="/investments"
+          path="/investimentos"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_investments">
@@ -127,7 +134,7 @@ export default function App() {
           }
         />
         <Route
-          path="/investments/dashboard"
+          path="/investimentos/painel"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_investments">
@@ -137,7 +144,7 @@ export default function App() {
           }
         />
         <Route
-          path="/investments/recommendations"
+          path="/investimentos/indicados"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_investments">
@@ -147,7 +154,7 @@ export default function App() {
           }
         />
         <Route
-          path="/admin/user-management"
+          path="/admin/usuarios"
           element={
             <ProtectedRoute>
               <SuperUserRoute>
@@ -157,7 +164,7 @@ export default function App() {
           }
         />
         <Route
-          path="/reports"
+          path="/relatorios"
           element={
             <ProtectedRoute>
               <Reports />
@@ -165,7 +172,7 @@ export default function App() {
           }
         />
         <Route
-          path="/settings/modules"
+          path="/configuracoes"
           element={
             <ProtectedRoute>
               <ModuleSettings />
@@ -174,7 +181,7 @@ export default function App() {
         />
         {/* Transport module routes - protegido por flag do tenant */}
         <Route
-          path="/transport/dashboard"
+          path="/transportadora/painel"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -184,7 +191,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/vehicles"
+          path="/transportadora/veiculos"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -194,7 +201,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/vehicles/new"
+          path="/transportadora/veiculos/novo"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -204,7 +211,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/trips"
+          path="/transportadora/viagens"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -214,7 +221,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/trips/new"
+          path="/transportadora/viagens/nova"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -224,7 +231,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/vehicles/:id"
+          path="/transportadora/veiculos/:id"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -234,7 +241,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/reports"
+          path="/transportadora/relatorios"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -244,7 +251,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/drivers"
+          path="/transportadora/motoristas"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -254,7 +261,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/maintenance"
+          path="/transportadora/manutencao"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -264,7 +271,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/maintenance/preventive"
+          path="/transportadora/manutencao/preventiva"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -274,7 +281,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/maintenance/predictive"
+          path="/transportadora/manutencao/preditiva"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -284,7 +291,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/maintenance/corrective"
+          path="/transportadora/manutencao/corretiva"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -294,7 +301,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/maintenance/checklist"
+          path="/transportadora/manutencao/checklist"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -304,7 +311,7 @@ export default function App() {
           }
         />
         <Route
-          path="/transport/fuel-refills"
+          path="/transportadora/abastecimento"
           element={
             <ProtectedRoute>
               <ModuleRoute moduleFlag="has_module_transport">
@@ -315,8 +322,37 @@ export default function App() {
         />
 
         {/* Rota padrão */}
-        <Route path="/" element={<Navigate to="/home" replace />} />
-        <Route path="*" element={<Navigate to="/home" replace />} />
+        <Route path="/" element={<Navigate to="/inicio" replace />} />
+
+        {/* Redirecionamentos das rotas antigas (em inglês) para as novas rotas em
+            português, mantendo links/favoritos salvos anteriormente funcionando. */}
+        <Route path="/home" element={<Navigate to="/inicio" replace />} />
+        <Route path="/change-password" element={<Navigate to="/trocar-senha" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/painel" replace />} />
+        <Route path="/transactions" element={<Navigate to="/transacoes" replace />} />
+        <Route path="/transactions/new" element={<Navigate to="/transacoes/nova" replace />} />
+        <Route path="/investments" element={<Navigate to="/investimentos" replace />} />
+        <Route path="/investments/dashboard" element={<Navigate to="/investimentos/painel" replace />} />
+        <Route path="/investments/recommendations" element={<Navigate to="/investimentos/indicados" replace />} />
+        <Route path="/admin/user-management" element={<Navigate to="/admin/usuarios" replace />} />
+        <Route path="/reports" element={<Navigate to="/relatorios" replace />} />
+        <Route path="/settings/modules" element={<Navigate to="/configuracoes" replace />} />
+        <Route path="/transport/dashboard" element={<Navigate to="/transportadora/painel" replace />} />
+        <Route path="/transport/vehicles" element={<Navigate to="/transportadora/veiculos" replace />} />
+        <Route path="/transport/vehicles/new" element={<Navigate to="/transportadora/veiculos/novo" replace />} />
+        <Route path="/transport/vehicles/:id" element={<LegacyVehicleProfileRedirect />} />
+        <Route path="/transport/trips" element={<Navigate to="/transportadora/viagens" replace />} />
+        <Route path="/transport/trips/new" element={<Navigate to="/transportadora/viagens/nova" replace />} />
+        <Route path="/transport/reports" element={<Navigate to="/transportadora/relatorios" replace />} />
+        <Route path="/transport/drivers" element={<Navigate to="/transportadora/motoristas" replace />} />
+        <Route path="/transport/maintenance" element={<Navigate to="/transportadora/manutencao" replace />} />
+        <Route path="/transport/maintenance/preventive" element={<Navigate to="/transportadora/manutencao/preventiva" replace />} />
+        <Route path="/transport/maintenance/predictive" element={<Navigate to="/transportadora/manutencao/preditiva" replace />} />
+        <Route path="/transport/maintenance/corrective" element={<Navigate to="/transportadora/manutencao/corretiva" replace />} />
+        <Route path="/transport/maintenance/checklist" element={<Navigate to="/transportadora/manutencao/checklist" replace />} />
+        <Route path="/transport/fuel-refills" element={<Navigate to="/transportadora/abastecimento" replace />} />
+
+        <Route path="*" element={<Navigate to="/inicio" replace />} />
       </Routes>
     </Router>
   );

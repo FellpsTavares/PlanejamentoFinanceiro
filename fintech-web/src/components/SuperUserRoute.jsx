@@ -5,7 +5,7 @@ export default function SuperUserRoute({ children }) {
   const user = authService.getCurrentUser();
 
   if (!user?.is_superuser) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/painel" replace />;
   }
 
   return children;
