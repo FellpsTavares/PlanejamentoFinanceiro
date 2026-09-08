@@ -163,13 +163,13 @@ export default function Dashboard() {
         {/* Botões de Ação */}
         <div className="flex gap-4">
           <button
-            onClick={() => navigate('/transactions')}
+            onClick={() => navigate('/transacoes')}
             className="btn-primary"
           >
             Ver Transações
           </button>
           <button
-            onClick={() => navigate('/transactions/new')}
+            onClick={() => navigate('/transacoes/nova')}
             className="btn-primary"
           >
             Nova Transação
