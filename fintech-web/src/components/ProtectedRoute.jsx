@@ -13,8 +13,8 @@ export default function ProtectedRoute({ children }) {
 
   // Redireciona para troca de senha se exigido, exceto se já estiver nessa rota
   const user = authService.getCurrentUser();
-  if (user?.must_change_password && location.pathname !== '/change-password') {
-    return <Navigate to="/change-password" replace />;
+  if (user?.must_change_password && location.pathname !== '/trocar-senha') {
+    return <Navigate to="/trocar-senha" replace />;
   }
 
   return (
