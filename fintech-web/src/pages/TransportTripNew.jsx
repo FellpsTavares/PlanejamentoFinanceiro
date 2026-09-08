@@ -199,15 +199,15 @@ export default function TransportTripNew() {
       if (tripId) {
         await transportService.updateTrip(tripId, payload);
         toast('Viagem atualizada', 'success');
-        navigate(`/transport/trips?trip=${tripId}`);
+        navigate(`/transportadora/viagens?trip=${tripId}`);
       } else {
         const created = await transportService.createTrip(payload);
         toast('Viagem criada', 'success');
         // redireciona para a tela de gerenciar viagens com a nova viagem pré-selecionada
         if (created && created.id) {
-          navigate(`/transport/trips?trip=${created.id}`);
+          navigate(`/transportadora/viagens?trip=${created.id}`);
         } else {
-          navigate('/transport/trips');
+          navigate('/transportadora/viagens');
         }
       }
     } catch (err) {
@@ -236,9 +236,9 @@ export default function TransportTripNew() {
       await transportService.deleteTrip(tripId);
       toast('Viagem excluída', 'success');
       if (vehicleId) {
-        navigate(`/transport/vehicles/${vehicleId}`);
+        navigate(`/transportadora/veiculos/${vehicleId}`);
       } else {
-        navigate('/transport/vehicles');
+        navigate('/transportadora/veiculos');
       }
     } catch (err) {
       console.error('Erro ao excluir viagem', err);
