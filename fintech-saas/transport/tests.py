@@ -543,3 +543,62 @@ class MonthlyClosingReportDriverPaymentTests(APITestCase):
         # total_value (10000) - despesas gerais (500) - motorista (400) = 9100.
         # Antes da correção, o resultado saía 8700 (motorista descontado 2x).
         self.assertEqual(summary['Resultado do período'], 'R$ 9.100,00')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ReportCustomCategoryLabelTests(APITestCase):
+    """
+    Regra: os relatórios devem mostrar o nome real da categoria escolhida no
+    lançamento (finance.Category), não o bucket interno de agregação
+    (expense_category: fuel/other/driver). Antes da correção, qualquer categoria
+    personalizada — que cai no bucket 'other' — aparecia como "Outros Gastos" em
+    vez do próprio nome, e o "Resumo de despesas por categoria" somava todas as
+    categorias personalizadas juntas numa única linha "Outros Gastos".
+    """
+
+    def setUp(self):
+        self.tenant, self.user = make_authenticated_tenant_user(self, slug='relatorio-categoria')
+        self.vehicle = make_vehicle(self.tenant, plate='CAT1E02')
+        self.toll_category = Category.objects.create(
+            tenant=self.tenant, name='Pedágio', type='expense',
+        )
+        self.tire_category = Category.objects.create(
+            tenant=self.tenant, name='Borracharia', type='expense',
+        )
+        self.trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            end_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            total_value=Decimal('1000'),
+        )
+        TripMovement.objects.create(
+            trip=self.trip, date='2026-09-05', movement_type='expense',
+            expense_category='other', category=self.toll_category,
+            amount=Decimal('25'), description='Pedágio BR-101',
+        )
+        TripMovement.objects.create(
+            trip=self.trip, date='2026-09-05', movement_type='expense',
+            expense_category='other', category=self.tire_category,
+            amount=Decimal('180'), description='Troca de pneu',
+        )
+
+    def test_movements_report_shows_real_category_name(self):
+        resp = self.client.get('/api/transport/reports/', {'report_type': 'movements'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        labels = {row['expense_category_label'] for row in resp.data['rows']}
+        self.assertEqual(labels, {'Pedágio', 'Borracharia'})
+        self.assertNotIn('Outros gastos', labels)
+
+    def test_summary_report_keeps_custom_categories_separate(self):
+        resp = self.client.get('/api/transport/reports/', {'report_type': 'summary'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        by_label = {row['expense_category_label']: row for row in resp.data['rows']}
+        self.assertIn('Pedágio', by_label)
+        self.assertIn('Borracharia', by_label)
+        self.assertNotIn('Outros gastos', by_label)
+        self.assertEqual(by_label['Pedágio']['total'], '25.00')
+        self.assertEqual(by_label['Borracharia']['total'], '180.00')
