@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { transportService } from '../services/transport';
 import { toast } from '../utils/toast';
 import ConfirmModal from './ConfirmModal';
+import { todayLocalISO } from '../utils/format';
 
 // Constantes
 const VIAGEM_TRIGGERS = ['adicionar viagem', 'nova viagem', 'criar viagem', 'registrar viagem'];
@@ -268,7 +269,7 @@ const normalizeViagemData = async (parsed) => {
   }
 
   const modality = data.modalidade?.includes('diaria') ? 'lease' : 'per_ton';
-  const startDate = parseDate(data.data) || new Date().toISOString().slice(0, 10);
+  const startDate = parseDate(data.data) || todayLocalISO();
 
   const payload = {
     vehicle: vehicle.id,
@@ -431,7 +432,7 @@ export default function ChatWidget({ open, onClose }) {
   };
 
   const handleAccessTrip = (tripId) => {
-    navigate(`/transport/trips?trip=${tripId}`);
+    navigate(`/transportadora/viagens?trip=${tripId}`);
     onClose();
   };
 
