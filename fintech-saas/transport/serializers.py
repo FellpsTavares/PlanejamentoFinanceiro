@@ -192,11 +192,13 @@ class VehicleSerializer(serializers.ModelSerializer):
 class TripSerializer(serializers.ModelSerializer):
     net_value = serializers.SerializerMethodField(read_only=True)
     driver_name = serializers.SerializerMethodField(read_only=True)
+    vehicle_plate = serializers.CharField(source='vehicle.plate', read_only=True)
+    vehicle_model = serializers.CharField(source='vehicle.model', read_only=True)
 
     class Meta:
         model = Trip
         fields = [
-            'id', 'vehicle', 'date', 'start_date', 'end_date', 'modality', 'progress_type', 'tons', 'rate_per_ton',
+            'id', 'vehicle', 'vehicle_plate', 'vehicle_model', 'date', 'start_date', 'end_date', 'modality', 'progress_type', 'tons', 'rate_per_ton',
             'days', 'daily_rate', 'total_value', 'is_received',
             'base_expense_value', 'fuel_expense_value', 'expense_items', 'initial_km', 'final_km',
             # novo: litros abastecidos e consumo calculado
@@ -204,7 +206,7 @@ class TripSerializer(serializers.ModelSerializer):
             'driver', 'driver_name',
             'status', 'driver_payment', 'expense_value', 'net_value', 'description'
         ]
-        read_only_fields = ['total_value', 'consumption_km_per_liter', 'driver_name']
+        read_only_fields = ['total_value', 'consumption_km_per_liter', 'driver_name', 'vehicle_plate', 'vehicle_model']
 
     def get_driver_name(self, obj):
         if obj.driver_id:
@@ -406,26 +408,57 @@ class TripSerializer(serializers.ModelSerializer):
 
 
 class TripMovementSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
     class Meta:
         model = TripMovement
-        fields = ['id', 'trip', 'date', 'movement_type', 'expense_category', 'amount', 'description', 'created_at']
-        read_only_fields = ['id', 'created_at', 'trip']
+        fields = [
+            'id', 'trip', 'date', 'movement_type', 'expense_category', 'category', 'category_name',
+            'amount', 'description', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'trip', 'expense_category', 'category_name']
 
     def validate(self, data):
+        from finance.models import Category
+
         movement_type = data.get('movement_type', getattr(self.instance, 'movement_type', None))
-        expense_category = data.get('expense_category', getattr(self.instance, 'expense_category', ''))
+        category = data.get('category', getattr(self.instance, 'category', None))
         description = data.get('description', getattr(self.instance, 'description', ''))
 
-        if movement_type == 'expense' and not expense_category:
-            raise serializers.ValidationError({'expense_category': 'Informe a categoria do gasto.'})
+        if movement_type == 'expense':
+            if not category:
+                raise serializers.ValidationError({'category': 'Selecione a categoria do gasto.'})
 
-        if movement_type == 'revenue':
+            tenant = self.context.get('tenant')
+            if tenant is not None and category.tenant_id != tenant.id:
+                raise serializers.ValidationError({'category': 'Categoria inválida para este tenant.'})
+            if category.type != 'expense':
+                raise serializers.ValidationError({'category': 'Categoria inválida: não é uma categoria de despesa.'})
+
+            # Deriva o bucket de agregação (fuel/other/driver) a partir da categoria
+            # escolhida, em vez de aceitar esse valor livremente do cliente — mantém
+            # Trip.recalculate_from_movements() (base_expense_value/fuel_expense_value)
+            # consistente com a categoria de fato selecionada.
+            if category.system_key == Category.SYSTEM_KEY_FUEL:
+                data['expense_category'] = 'fuel'
+            elif category.system_key == Category.SYSTEM_KEY_SALARY:
+                data['expense_category'] = 'driver'
+            else:
+                data['expense_category'] = 'other'
+
+            # A categoria pode trazer uma descrição padrão (ex.: pedágio, marcação de
+            # placa); só exigimos preenchimento manual quando não há uma padrão.
+            has_default_description = bool((category.default_entry_description or '').strip())
+            if not (description or '').strip():
+                if has_default_description:
+                    data['description'] = category.default_entry_description.strip()
+                elif category.system_key == Category.SYSTEM_KEY_FUEL:
+                    data['description'] = ''
+                else:
+                    raise serializers.ValidationError({'description': 'Informe a descrição deste lançamento.'})
+        else:
             data['expense_category'] = ''
-
-        if movement_type == 'expense' and expense_category == 'fuel':
-            data['description'] = (description or '').strip()
-        elif not (description or '').strip():
-            raise serializers.ValidationError({'description': 'Informe a descrição deste lançamento.'})
+            data['category'] = None
 
         return data
 
