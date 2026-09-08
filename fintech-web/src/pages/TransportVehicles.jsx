@@ -92,8 +92,8 @@ export default function TransportVehicles() {
       <h1 className="text-2xl font-bold">Veículos</h1>
       <div className="mt-4">
         <div className="flex gap-2">
-          <Link to="/transport/vehicles/new" className="btn btn-primary">Cadastrar Veículo</Link>
-          <Link to="/transport/trips/new" className="btn btn-secondary">Nova Viagem</Link>
+          <Link to="/transportadora/veiculos/novo" className="btn btn-primary">Cadastrar Veículo</Link>
+          <Link to="/transportadora/viagens/nova" className="btn btn-secondary">Nova Viagem</Link>
         </div>
       </div>
 
@@ -108,8 +108,8 @@ export default function TransportVehicles() {
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button onClick={() => openModal('entry', v)} className="btn btn-sm bg-green-100 text-green-700 border-green-200 hover:bg-green-200">Entrada</button>
                 <button onClick={() => openModal('exit', v)} className="btn btn-sm btn-danger">Saída</button>
-                <Link to={`/transport/trips/new?vehicle=${v.id}`} className="btn btn-sm btn-secondary">Viagem</Link>
-                <Link to={`/transport/vehicles/${v.id}`} className="btn btn-sm btn-primary">Abrir</Link>
+                <Link to={`/transportadora/viagens/nova?vehicle=${v.id}`} className="btn btn-sm btn-secondary">Viagem</Link>
+                <Link to={`/transportadora/veiculos/${v.id}`} className="btn btn-sm btn-primary">Abrir</Link>
               </div>
             </div>
           </li>
