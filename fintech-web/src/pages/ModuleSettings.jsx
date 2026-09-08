@@ -8,6 +8,8 @@ import { transportService } from '../services/transport';
 import api from '../services/api';
 import { toast } from '../utils/toast';
 import ConfirmModal from '../components/ConfirmModal';
+import CurrencyInput from '../components/CurrencyInput';
+import { formatDecimalString, normalizeInputDecimal } from '../utils/format';
 
 const MODULE_LABELS = {
   general: 'Geral',
@@ -32,23 +34,6 @@ const DEFAULT_AUDIT_FILTERS = {
   end_date: '',
   limit: '30',
 };
-
-const CATEGORY_EMOJI_OPTIONS = [
-  { value: '💰', label: 'Dinheiro' },
-  { value: '💳', label: 'Cartão' },
-  { value: '🛒', label: 'Compras' },
-  { value: '🏠', label: 'Casa' },
-  { value: '🚗', label: 'Transporte' },
-  { value: '⛽', label: 'Combustível' },
-  { value: '🍔', label: 'Alimentação' },
-  { value: '🏥', label: 'Saúde' },
-  { value: '🎓', label: 'Educação' },
-  { value: '📱', label: 'Tecnologia' },
-  { value: '🎁', label: 'Lazer' },
-  { value: '📈', label: 'Investimento' },
-  { value: '📉', label: 'Despesa' },
-  { value: '🧾', label: 'Contas' },
-];
 
 export default function ModuleSettings() {
   const [user, setUser] = useState(() => authService.getCurrentUser());
@@ -124,17 +109,17 @@ export default function ModuleSettings() {
     name: '',
     description: '',
     type: 'expense',
-    color: '#3B82F6',
-    icon: '💰',
+    default_amount: '',
+    default_entry_description: '',
   });
   const [editingCategoryId, setEditingCategoryId] = useState('');
   const [editingCategoryForm, setEditingCategoryForm] = useState({
     name: '',
     description: '',
     type: 'expense',
-    color: '#3B82F6',
-    icon: '💰',
     is_active: true,
+    default_amount: '',
+    default_entry_description: '',
   });
 
   const [tipoRecebimento, setTipoRecebimento] = useState('1');
@@ -241,8 +226,15 @@ export default function ModuleSettings() {
 
   useEffect(() => {
     if (activeModule === 'finance') {
-      loadCategories();
       loadPaymentMethods();
+    }
+  }, [activeModule]);
+
+  // Categorias são usadas principalmente pelos lançamentos de viagem do módulo
+  // de Transportadora, então o gerenciamento fica nessa aba (não em Finanças).
+  useEffect(() => {
+    if (activeModule === 'transport') {
+      loadCategories();
     }
   }, [activeModule]);
 
@@ -377,13 +369,20 @@ export default function ModuleSettings() {
     }
 
     try {
-      await transactionService.createCategory({ ...categoryForm, name });
+      const amountRaw = categoryForm.default_amount;
+      const payload = {
+        ...categoryForm,
+        name,
+        default_amount: amountRaw ? normalizeInputDecimal(String(amountRaw)).trim() : null,
+        default_entry_description: (categoryForm.default_entry_description || '').trim(),
+      };
+      await transactionService.createCategory(payload);
       setCategoryForm({
         name: '',
         description: '',
         type: 'expense',
-        color: '#3B82F6',
-        icon: '💰',
+        default_amount: '',
+        default_entry_description: '',
       });
       await loadCategories();
       toast('Categoria criada com sucesso', 'success');
@@ -399,9 +398,9 @@ export default function ModuleSettings() {
       name: category.name || '',
       description: category.description || '',
       type: category.type || 'expense',
-      color: category.color || '#3B82F6',
-      icon: category.icon || '💰',
       is_active: category.is_active ?? true,
+      default_amount: category.default_amount != null ? formatDecimalString(category.default_amount, 2) : '',
+      default_entry_description: category.default_entry_description || '',
     });
   };
 
@@ -413,9 +412,12 @@ export default function ModuleSettings() {
 
     if (!editingCategoryId) return;
 
+    const amountRaw = editingCategoryForm.default_amount;
     const payload = {
       ...editingCategoryForm,
       name: editingCategoryForm.name.trim(),
+      default_amount: amountRaw ? normalizeInputDecimal(String(amountRaw)).trim() : null,
+      default_entry_description: (editingCategoryForm.default_entry_description || '').trim(),
     };
 
     if (!payload.name) {
@@ -434,12 +436,16 @@ export default function ModuleSettings() {
     }
   };
 
-  const handleDeleteCategory = (categoryId) => {
+  const handleDeleteCategory = (category) => {
     if (!canEdit) {
       toast('Somente admin/manager pode excluir categorias.', 'error');
       return;
     }
-    setConfirmDeleteCategoryId(categoryId);
+    if (category?.system_key) {
+      toast('Esta é uma categoria padrão do sistema (usada pelo módulo de transporte) e não pode ser excluída. Você pode editar o nome, valor e descrição padrão dela.', 'error');
+      return;
+    }
+    setConfirmDeleteCategoryId(category.id);
   };
 
   const performDeleteCategory = async (categoryId) => {
@@ -1087,88 +1093,6 @@ export default function ModuleSettings() {
             )}
           </div>
 
-          <div className="card p-4 border rounded space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold">Categorias</h3>
-              <button className="btn btn-secondary" type="button" onClick={() => toggleSection('categories')}>
-                {sectionOpen.categories ? 'Recolher' : 'Ajustar categorias'}
-              </button>
-            </div>
-
-            {sectionOpen.categories && (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input className="input-field w-full" placeholder="Nome da categoria" value={categoryForm.name} onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
-                  <select className="input-field w-full" value={categoryForm.type} onChange={(e) => setCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
-                    <option value="expense">Despesa</option>
-                    <option value="income">Receita</option>
-                  </select>
-                  <select className="input-field w-full" value={categoryForm.icon} onChange={(e) => setCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
-                    {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                      <option key={emoji.value} value={emoji.value}>{emoji.value} {emoji.label}</option>
-                    ))}
-                  </select>
-                  <input className="input-field w-full" type="color" value={categoryForm.color} onChange={(e) => setCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
-                  <input className="input-field w-full md:col-span-2" placeholder="Descrição (opcional)" value={categoryForm.description} onChange={(e) => setCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
-                </div>
-
-                <button className="btn btn-primary" type="button" onClick={handleCreateCategory} disabled={!canEdit}>
-                  Incluir categoria
-                </button>
-
-                {categoriesLoading ? (
-                  <p className="text-sm text-gray-600">Carregando categorias...</p>
-                ) : categories.length === 0 ? (
-                  <p className="text-sm text-gray-600">Nenhuma categoria cadastrada.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {categories.map((c) => (
-                      <div key={c.id} className="border rounded p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm">
-                            <div className="font-medium flex items-center gap-2">
-                              <span>{c.icon || '💰'}</span>
-                              <span>{c.name}</span>
-                            </div>
-                            <div className="text-gray-600">{c.type === 'income' ? 'Receita' : 'Despesa'}</div>
-                          </div>
-
-                          <div className="flex gap-2">
-                            <button className="btn btn-secondary" type="button" onClick={() => startEditCategory(c)} disabled={!canEdit}>Editar</button>
-                            <button className="btn btn-secondary" type="button" onClick={() => handleDeleteCategory(c.id)} disabled={!canEdit}>Excluir</button>
-                          </div>
-                        </div>
-
-                        {editingCategoryId === c.id && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                            <input className="input-field w-full" value={editingCategoryForm.name} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
-                            <select className="input-field w-full" value={editingCategoryForm.type} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
-                              <option value="expense">Despesa</option>
-                              <option value="income">Receita</option>
-                            </select>
-                            <select className="input-field w-full" value={editingCategoryForm.icon} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, icon: e.target.value }))} disabled={!canEdit}>
-                              {CATEGORY_EMOJI_OPTIONS.map((emoji) => (
-                                <option key={`edit-opt-${emoji.value}`} value={emoji.value}>{emoji.value} {emoji.label}</option>
-                              ))}
-                            </select>
-                            <input className="input-field w-full" type="color" value={editingCategoryForm.color} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, color: e.target.value }))} disabled={!canEdit} />
-                            <input className="input-field w-full md:col-span-2" value={editingCategoryForm.description} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
-                            <div className="md:col-span-2 flex gap-2">
-                              <button className="btn btn-primary" type="button" onClick={handleSaveCategoryEdit} disabled={!canEdit}>Salvar</button>
-                              <button className="btn btn-secondary" type="button" onClick={() => setEditingCategoryId('')}>Cancelar</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!canEdit && <p className="text-sm text-gray-500">Somente admin/manager pode alterar categorias.</p>}
-              </>
-            )}
-          </div>
-
           {renderAuditSection('finance')}
         </div>
       ) : loading ? (
@@ -1234,6 +1158,139 @@ export default function ModuleSettings() {
               </button>
               {!canEdit && <p className="text-sm text-gray-500 mt-2">Somente admin/manager pode alterar configurações.</p>}
             </div>
+          </div>
+
+          <div className="card p-4 border rounded space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold">Categorias</h3>
+              <button className="btn btn-secondary" type="button" onClick={() => toggleSection('categories')}>
+                {sectionOpen.categories ? 'Recolher' : 'Ajustar categorias'}
+              </button>
+            </div>
+
+            {sectionOpen.categories && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input className="input-field w-full" placeholder="Nome da categoria" value={categoryForm.name} onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
+                  <select className="input-field w-full" value={categoryForm.type} onChange={(e) => setCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
+                    <option value="expense">Despesa</option>
+                    <option value="income">Receita</option>
+                  </select>
+                  <input className="input-field w-full md:col-span-2" placeholder="Descrição (opcional)" value={categoryForm.description} onChange={(e) => setCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
+                </div>
+
+                <div className="p-3 rounded border border-dashed border-gray-300 bg-gray-50 space-y-2">
+                  <p className="text-xs text-gray-600">
+                    Valor e descrição padrão do lançamento — preencha <strong>apenas para categorias que geralmente têm um preço fixo</strong>
+                    (ex.: pedágio, marcação de placa). Ao lançar um gasto nessa categoria, esses valores preenchem o formulário
+                    automaticamente. Se deixar em branco, o valor precisará ser digitado a cada lançamento.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                      <CurrencyInput
+                        className="input-field w-full"
+                        style={{ paddingLeft: '3rem' }}
+                        placeholder="Valor padrão (opcional)"
+                        value={categoryForm.default_amount}
+                        onChange={(e) => setCategoryForm((prev) => ({ ...prev, default_amount: e.target.value }))}
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <input
+                      className="input-field w-full"
+                      placeholder="Descrição padrão do lançamento (opcional)"
+                      value={categoryForm.default_entry_description}
+                      onChange={(e) => setCategoryForm((prev) => ({ ...prev, default_entry_description: e.target.value }))}
+                      disabled={!canEdit}
+                    />
+                  </div>
+                </div>
+
+                <button className="btn btn-primary" type="button" onClick={handleCreateCategory} disabled={!canEdit}>
+                  Incluir categoria
+                </button>
+
+                {categoriesLoading ? (
+                  <p className="text-sm text-gray-600">Carregando categorias...</p>
+                ) : categories.length === 0 ? (
+                  <p className="text-sm text-gray-600">Nenhuma categoria cadastrada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {categories.map((c) => (
+                      <div key={c.id} className="border rounded p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm">
+                            <div className="font-medium flex items-center gap-2 flex-wrap">
+                              <span>{c.name}</span>
+                              {c.system_key && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Padrão do sistema</span>
+                              )}
+                            </div>
+                            <div className="text-gray-600">{c.type === 'income' ? 'Receita' : 'Despesa'}</div>
+                            {(c.default_amount != null || c.default_entry_description) && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                {c.default_amount != null && <>Valor padrão: R$ {formatDecimalString(c.default_amount, 2)} </>}
+                                {c.default_entry_description && <>· Descrição padrão: "{c.default_entry_description}"</>}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button className="btn btn-secondary" type="button" onClick={() => startEditCategory(c)} disabled={!canEdit}>Editar</button>
+                            {!c.system_key && (
+                              <button className="btn btn-secondary" type="button" onClick={() => handleDeleteCategory(c)} disabled={!canEdit}>Excluir</button>
+                            )}
+                          </div>
+                        </div>
+
+                        {editingCategoryId === c.id && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <input className="input-field w-full" value={editingCategoryForm.name} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, name: e.target.value }))} disabled={!canEdit} />
+                            <select className="input-field w-full" value={editingCategoryForm.type} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, type: e.target.value }))} disabled={!canEdit}>
+                              <option value="expense">Despesa</option>
+                              <option value="income">Receita</option>
+                            </select>
+                            <input className="input-field w-full md:col-span-2" value={editingCategoryForm.description} onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, description: e.target.value }))} disabled={!canEdit} />
+                            <div className="md:col-span-2 p-3 rounded border border-dashed border-gray-300 bg-gray-50 space-y-2">
+                              <p className="text-xs text-gray-600">
+                                Valor e descrição padrão do lançamento — preencha apenas para categorias de preço fixo (ex.: pedágio, marcação de placa).
+                              </p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none select-none">R$</span>
+                                  <CurrencyInput
+                                    className="input-field w-full"
+                                    style={{ paddingLeft: '3rem' }}
+                                    placeholder="Valor padrão (opcional)"
+                                    value={editingCategoryForm.default_amount}
+                                    onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, default_amount: e.target.value }))}
+                                    disabled={!canEdit}
+                                  />
+                                </div>
+                                <input
+                                  className="input-field w-full"
+                                  placeholder="Descrição padrão do lançamento (opcional)"
+                                  value={editingCategoryForm.default_entry_description}
+                                  onChange={(e) => setEditingCategoryForm((prev) => ({ ...prev, default_entry_description: e.target.value }))}
+                                  disabled={!canEdit}
+                                />
+                              </div>
+                            </div>
+                            <div className="md:col-span-2 flex gap-2">
+                              <button className="btn btn-primary" type="button" onClick={handleSaveCategoryEdit} disabled={!canEdit}>Salvar</button>
+                              <button className="btn btn-secondary" type="button" onClick={() => setEditingCategoryId('')}>Cancelar</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!canEdit && <p className="text-sm text-gray-500">Somente admin/manager pode alterar categorias.</p>}
+              </>
+            )}
           </div>
 
           {renderAuditSection('transport')}
