@@ -126,6 +126,7 @@ _VEHICLE_ORDER_FIELDS = {'plate', 'model', 'year'}
 MOVEMENT_CATEGORY_LABELS = {
     'fuel': 'Combustível',
     'other': 'Outros gastos',
+    'driver': 'Salário/Comissão',
     '': 'Receita',
 }
 MOVEMENT_TYPE_LABELS = {
@@ -871,8 +872,15 @@ class TransportReportView(APIView):
                 ])
 
         # ---- Lançamentos (gastos/receitas) do período, por data do lançamento ----
+        # Exclui a categoria 'driver' (Salário/Comissão): o pagamento ao motorista já
+        # é somado separadamente a partir de Trip.driver_payment logo abaixo
+        # (total_driver_payment / driver_payment_rows). O lançamento automático dessa
+        # categoria existe só para aparecer no extrato da viagem e nos relatórios de
+        # categoria; incluí-lo aqui também contaria o pagamento do motorista duas
+        # vezes no resultado do período.
         movements_qs = (
             TripMovement.objects.filter(trip__vehicle=vehicle, date__gte=start, date__lte=end)
+            .exclude(expense_category='driver')
             .order_by('date', 'id')
         )
 
