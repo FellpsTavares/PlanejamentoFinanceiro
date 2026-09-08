@@ -1,6 +1,8 @@
+import io
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -602,3 +604,431 @@ class ReportCustomCategoryLabelTests(APITestCase):
         self.assertNotIn('Outros gastos', by_label)
         self.assertEqual(by_label['Pedágio']['total'], '25.00')
         self.assertEqual(by_label['Borracharia']['total'], '180.00')
+
+
+class SyncExpenseMovementsResyncTests(TestCase):
+    """
+    Regra: rodar sync_expense_movements() numa viagem que JÁ tem lançamentos
+    automáticos de uma sincronização anterior (o caso real de editar uma viagem
+    existente) não pode zerar base_expense_value/fuel_expense_value nem deixar de
+    recriar os lançamentos de combustível e outros gastos.
+
+    Causa raiz do bug: `self.movements` é o related manager reverso da FK, então o
+    Django cacheia `self` como o `.trip` dos objetos retornados por ele. O sinal
+    post_delete disparado por `existing_auto_movements.delete()` roda
+    `instance.trip.recalculate_from_movements()` — como `instance.trip is self`,
+    isso zera os campos no MESMO objeto que o método ainda está usando, antes de
+    recriar os lançamentos novos.
+    """
+
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.vehicle = make_vehicle(self.tenant)
+        self.trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            total_value=Decimal('1000'),
+            base_expense_value=Decimal('50'),
+            fuel_expense_value=Decimal('80'),
+            driver_payment=Decimal('120'),
+            expense_value=Decimal('250'),
+        )
+        self.trip.sync_expense_movements()
+
+    def test_resync_after_edit_preserves_base_and_fuel_expense(self):
+        trip = Trip.objects.get(pk=self.trip.pk)
+        trip.driver_payment = Decimal('200')
+        trip.expense_value = trip.base_expense_value + trip.fuel_expense_value + trip.driver_payment
+        trip.save()
+        trip.sync_expense_movements()
+
+        fresh = Trip.objects.get(pk=self.trip.pk)
+        self.assertEqual(fresh.base_expense_value, Decimal('50.00'))
+        self.assertEqual(fresh.fuel_expense_value, Decimal('80.00'))
+        self.assertEqual(fresh.driver_payment, Decimal('200.00'))
+        self.assertEqual(fresh.expense_value, Decimal('330.00'))
+
+    def test_resync_after_edit_recreates_fuel_and_other_movements(self):
+        trip = Trip.objects.get(pk=self.trip.pk)
+        trip.driver_payment = Decimal('200')
+        trip.save()
+        trip.sync_expense_movements()
+
+        categories = sorted(trip.movements.filter(is_auto_generated=True).values_list('expense_category', flat=True))
+        self.assertEqual(categories, ['driver', 'fuel', 'other'])
+
+    def test_third_resync_still_keeps_values_correct(self):
+        # Garante que o bug não reaparece depois de múltiplas edições seguidas.
+        trip = Trip.objects.get(pk=self.trip.pk)
+        for driver_payment in (Decimal('150'), Decimal('175'), Decimal('220')):
+            trip = Trip.objects.get(pk=self.trip.pk)
+            trip.driver_payment = driver_payment
+            trip.save()
+            trip.sync_expense_movements()
+
+        fresh = Trip.objects.get(pk=self.trip.pk)
+        self.assertEqual(fresh.base_expense_value, Decimal('50.00'))
+        self.assertEqual(fresh.fuel_expense_value, Decimal('80.00'))
+        self.assertEqual(fresh.expense_value, Decimal('350.00'))  # 50 + 80 + 220
+
+
+class FixTripExpenseCorruptionCommandTests(TestCase):
+    """
+    Testa o comando de correção retroativa (fix_trip_expense_corruption) usado
+    para produção: precisa apontar viagens com a assinatura do bug antigo (para
+    revisão manual, já que o valor original está perdido) e rodar a fase de
+    resync sem erro sobre viagens normais e já corrompidas.
+    """
+
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.vehicle = make_vehicle(self.tenant)
+
+    def _make_corrupted_trip(self):
+        """Recria à mão o estado exato que o bug antigo deixava: só o lançamento
+        de driver sobrevive, base/fuel zerados na viagem e sem lançamentos."""
+        salary_category = ensure_default_category(self.tenant, Category.SYSTEM_KEY_SALARY)
+        trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-08-01',
+            start_date='2026-08-01',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            total_value=Decimal('1000'),
+            base_expense_value=Decimal('0'),
+            fuel_expense_value=Decimal('0'),
+            driver_payment=Decimal('150'),
+            expense_value=Decimal('150'),
+        )
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-01', movement_type='expense', expense_category='driver',
+            category=salary_category, amount=Decimal('150'), description='Pagamento ao motorista',
+            is_auto_generated=True,
+        )
+        return trip
+
+    def _make_healthy_trip(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-08-02',
+            start_date='2026-08-02',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            total_value=Decimal('1000'),
+            base_expense_value=Decimal('30'),
+            fuel_expense_value=Decimal('40'),
+            driver_payment=Decimal('0'),
+        )
+        trip.sync_expense_movements()
+        return trip
+
+    def test_dry_run_flags_corrupted_trip_without_changing_it(self):
+        corrupted = self._make_corrupted_trip()
+        healthy = self._make_healthy_trip()
+
+        out = io.StringIO()
+        call_command('fix_trip_expense_corruption', '--dry-run', stdout=out)
+        output = out.getvalue()
+
+        self.assertIn(f'viagem #{corrupted.id}', output)
+        self.assertNotIn(f'viagem #{healthy.id}', output)
+        self.assertIn('pulando as fases 2 e 3', output)
+
+        # --dry-run não deve ter alterado nada
+        corrupted.refresh_from_db()
+        self.assertEqual(corrupted.base_expense_value, Decimal('0.00'))
+
+    def test_full_run_resyncs_without_crashing_and_lists_corrupted_trip(self):
+        corrupted = self._make_corrupted_trip()
+        self._make_healthy_trip()
+
+        out = io.StringIO()
+        call_command('fix_trip_expense_corruption', stdout=out)
+        output = out.getvalue()
+
+        self.assertIn(f'viagem #{corrupted.id}', output)
+        self.assertIn('resincronizada', output)
+
+    def test_tenant_id_filter_only_checks_that_tenant(self):
+        other_tenant = make_tenant(slug='outro-tenant-fix')
+        other_vehicle = make_vehicle(other_tenant, plate='OUT9Z99')
+        other_trip = Trip.objects.create(
+            vehicle=other_vehicle, date='2026-08-01', start_date='2026-08-01', modality='per_ton',
+            tons=Decimal('1'), rate_per_ton=Decimal('1'), total_value=Decimal('1'),
+            base_expense_value=Decimal('0'), fuel_expense_value=Decimal('0'), driver_payment=Decimal('50'),
+        )
+        salary_category = ensure_default_category(other_tenant, Category.SYSTEM_KEY_SALARY)
+        TripMovement.objects.create(
+            trip=other_trip, date='2026-08-01', movement_type='expense', expense_category='driver',
+            category=salary_category, amount=Decimal('50'), is_auto_generated=True,
+        )
+        corrupted = self._make_corrupted_trip()
+
+        out = io.StringIO()
+        call_command('fix_trip_expense_corruption', '--dry-run', '--tenant-id', str(self.tenant.id), stdout=out)
+        output = out.getvalue()
+
+        self.assertIn(f'viagem #{corrupted.id}', output)
+        self.assertNotIn(f'viagem #{other_trip.id}', output)
+
+    def test_backfills_category_on_legacy_movements_without_touching_others(self):
+        # Lançamento manual antigo, de antes da FK category existir: expense_category
+        # preenchido, mas category em branco.
+        legacy_trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-03', start_date='2026-08-03', modality='per_ton',
+            tons=Decimal('1'), rate_per_ton=Decimal('1'), total_value=Decimal('1'),
+        )
+        legacy_fuel = TripMovement.objects.create(
+            trip=legacy_trip, date='2026-08-03', movement_type='expense',
+            expense_category='fuel', category=None, amount=Decimal('90'),
+            description='Diesel', is_auto_generated=False,
+        )
+        legacy_other = TripMovement.objects.create(
+            trip=legacy_trip, date='2026-08-03', movement_type='expense',
+            expense_category='other', category=None, amount=Decimal('15'),
+            description='Balsa antiga', is_auto_generated=False,
+        )
+        # Já tinha uma categoria própria vinculada (Pedágio) — não pode ser
+        # substituída pela categoria genérica "Outros Gastos" do bucket.
+        toll_category = Category.objects.create(tenant=self.tenant, name='Pedágio', type='expense')
+        already_linked = TripMovement.objects.create(
+            trip=legacy_trip, date='2026-08-03', movement_type='expense',
+            expense_category='other', category=toll_category, amount=Decimal('20'),
+            description='Já linkado', is_auto_generated=False,
+        )
+
+        out = io.StringIO()
+        call_command('fix_trip_expense_corruption', stdout=out)
+        output = out.getvalue()
+
+        self.assertIn('lançamento(s) com categoria vinculada retroativamente', output)
+        legacy_fuel.refresh_from_db()
+        legacy_other.refresh_from_db()
+        already_linked.refresh_from_db()
+        self.assertEqual(legacy_fuel.category.system_key, Category.SYSTEM_KEY_FUEL)
+        self.assertEqual(legacy_other.category.system_key, Category.SYSTEM_KEY_OTHER)
+        self.assertEqual(already_linked.category_id, toll_category.id)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class AutoGeneratedMovementsHaveCategoryLinkedTests(APITestCase):
+    """
+    Regra: os lançamentos automáticos de combustível e outros gastos (criados a
+    partir de Trip.fuel_expense_value / base_expense_value) precisam ficar
+    vinculados à categoria real (finance.Category), não só ao bucket interno
+    (expense_category). Sem isso, esses lançamentos ficam com category_id em
+    branco e caem numa linha separada dos lançamentos manuais da mesma categoria
+    nos relatórios — ex.: "Combustível" aparecendo duas vezes no Resumo por
+    Categoria, uma para os automáticos (sem categoria vinculada) e outra para os
+    manuais, cada uma com seu próprio total, dando a impressão de duplicidade.
+    """
+
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.vehicle = make_vehicle(self.tenant)
+
+    def test_auto_generated_fuel_and_other_movements_get_real_category(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            base_expense_value=Decimal('50'),
+            fuel_expense_value=Decimal('80'),
+        )
+        trip.sync_expense_movements()
+
+        fuel_movement = trip.movements.get(expense_category='fuel')
+        other_movement = trip.movements.get(expense_category='other')
+        self.assertIsNotNone(fuel_movement.category_id)
+        self.assertIsNotNone(other_movement.category_id)
+        self.assertEqual(fuel_movement.category.system_key, Category.SYSTEM_KEY_FUEL)
+        self.assertEqual(other_movement.category.system_key, Category.SYSTEM_KEY_OTHER)
+
+    def test_expense_items_movements_also_get_real_category(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('100'),
+            expense_items=[{'valor': '30', 'descricao': 'Balsa'}],
+        )
+        trip.sync_expense_movements()
+
+        movement = trip.movements.get(expense_category='other')
+        self.assertIsNotNone(movement.category_id)
+        self.assertEqual(movement.category.system_key, Category.SYSTEM_KEY_OTHER)
+
+    def test_summary_report_no_longer_splits_auto_and_manual_fuel_into_two_rows(self):
+        tenant, user = make_authenticated_tenant_user(self, slug='resumo-sem-duplicata')
+        vehicle = make_vehicle(tenant, plate='NDU1P23')
+        auto_trip = Trip.objects.create(
+            vehicle=vehicle, date='2026-09-05', start_date='2026-09-05', modality='per_ton',
+            tons=Decimal('10'), rate_per_ton=Decimal('100'), fuel_expense_value=Decimal('100'),
+        )
+        auto_trip.sync_expense_movements()
+
+        fuel_category = Category.objects.get(tenant=tenant, system_key='fuel')
+        manual_trip = Trip.objects.create(
+            vehicle=vehicle, date='2026-09-06', start_date='2026-09-06', modality='per_ton',
+            tons=Decimal('5'), rate_per_ton=Decimal('100'),
+        )
+        TripMovement.objects.create(
+            trip=manual_trip, date='2026-09-06', movement_type='expense',
+            expense_category='fuel', category=fuel_category, amount=Decimal('60'),
+            description='Diesel', is_auto_generated=False,
+        )
+
+        resp = self.client.get('/api/transport/reports/', {'report_type': 'summary'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        fuel_rows = [row for row in resp.data['rows'] if row['expense_category_label'] == 'Combustível']
+        self.assertEqual(len(fuel_rows), 1)
+        self.assertEqual(fuel_rows[0]['total'], '160.00')
+        self.assertEqual(fuel_rows[0]['count'], 2)
+
+
+class RecalculateFromMovementsDoesNotDoubleCountTests(TestCase):
+    """
+    Regra: recalculate_from_movements() precisa somar só os lançamentos MANUAIS
+    (is_auto_generated=False). Os automáticos são um espelho gerado por
+    sync_expense_movements() a partir de base_expense_value/fuel_expense_value —
+    somá-los de volta cria uma referência circular: o espelho conta a si mesmo
+    junto com os lançamentos manuais que ele resume, dobrando o valor sempre que
+    algo dispara um recálculo depois do espelho já existir (ex.: vincular a
+    categoria de um lançamento automático antigo, como o comando
+    fix_trip_expense_corruption faz retroativamente em produção).
+
+    Causa raiz real encontrada em produção: uma viagem tinha 10 lançamentos
+    manuais somando R$ 4.889,37 (outros gastos) e R$ 9.963,76 (combustível), mais
+    um lançamento automático antigo (sem categoria vinculada, de antes da FK
+    category existir) espelhando esses mesmos totais. Vincular a categoria desse
+    lançamento automático antigo disparava o sinal post_save, que recalculava
+    somando manual + espelho = o dobro.
+    """
+
+    def setUp(self):
+        self.tenant = make_tenant()
+        self.vehicle = make_vehicle(self.tenant)
+
+    def test_recalculating_after_touching_a_stale_auto_movement_does_not_double(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-25', start_date='2026-08-25', modality='per_ton',
+            tons=Decimal('56.31'), rate_per_ton=Decimal('270'), total_value=Decimal('15203.70'),
+            base_expense_value=Decimal('4889.37'), fuel_expense_value=Decimal('9963.76'),
+            driver_payment=Decimal('1672.41'), expense_value=Decimal('16525.54'),
+        )
+        manual = [
+            ('other', Decimal('50.00')), ('other', Decimal('104.00')), ('other', Decimal('104.00')),
+            ('other', Decimal('104.40')), ('fuel', Decimal('1340.00')), ('fuel', Decimal('4737.50')),
+            ('other', Decimal('3980.00')), ('other', Decimal('247.00')), ('other', Decimal('299.97')),
+            ('fuel', Decimal('3886.26')),
+        ]
+        for cat, amount in manual:
+            TripMovement.objects.create(
+                trip=trip, date='2026-08-25', movement_type='expense', expense_category=cat,
+                category=None, amount=amount, is_auto_generated=False,
+            )
+        # Lançamento automático antigo, sem categoria (o "espelho" de uma sincronização anterior)
+        stale_other = TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='other',
+            category=None, amount=Decimal('4889.37'), is_auto_generated=True,
+        )
+        stale_fuel = TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='fuel',
+            category=None, amount=Decimal('9963.76'), is_auto_generated=True,
+        )
+
+        # Simula o backfill de categoria (fix_trip_expense_corruption Fase 2) tocando
+        # os lançamentos automáticos antigos — isso dispara recalculate_from_movements().
+        other_category = ensure_default_category(self.tenant, Category.SYSTEM_KEY_OTHER)
+        fuel_category = ensure_default_category(self.tenant, Category.SYSTEM_KEY_FUEL)
+        stale_other.category = other_category
+        stale_other.save(update_fields=['category'])
+        stale_fuel.category = fuel_category
+        stale_fuel.save(update_fields=['category'])
+
+        trip.refresh_from_db()
+        self.assertEqual(trip.base_expense_value, Decimal('4889.37'))
+        self.assertEqual(trip.fuel_expense_value, Decimal('9963.76'))
+
+    def test_form_only_trip_without_manual_movements_is_not_zeroed(self):
+        # Viagem preenchida só pelo formulário completo (Outros gastos/Combustível
+        # direto na viagem), sem nenhum lançamento manual em "Lançar movimentação".
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-01', start_date='2026-08-01', modality='per_ton',
+            tons=Decimal('5'), rate_per_ton=Decimal('100'),
+            base_expense_value=Decimal('500'), fuel_expense_value=Decimal('300'),
+        )
+        trip.sync_expense_movements()  # cria só o espelho automático, sem nenhum manual
+
+        auto_movement = trip.movements.get(expense_category='other', is_auto_generated=True)
+        auto_movement.category = ensure_default_category(self.tenant, Category.SYSTEM_KEY_OTHER)
+        auto_movement.save(update_fields=['category'])  # dispara recalculate_from_movements()
+
+        trip.refresh_from_db()
+        self.assertEqual(trip.base_expense_value, Decimal('500'))
+        self.assertEqual(trip.fuel_expense_value, Decimal('300'))
+
+    def test_recalculate_still_sums_manual_movements_correctly(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-01', start_date='2026-08-01', modality='per_ton',
+            tons=Decimal('5'), rate_per_ton=Decimal('100'),
+        )
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-01', movement_type='expense', expense_category='other',
+            amount=Decimal('30'), is_auto_generated=False,
+        )
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-01', movement_type='expense', expense_category='other',
+            amount=Decimal('20'), is_auto_generated=False,
+        )
+        trip.recalculate_from_movements()
+        trip.refresh_from_db()
+        self.assertEqual(trip.base_expense_value, Decimal('50'))
+
+    def test_fix_command_repairs_a_trip_already_doubled_by_the_old_bug(self):
+        # Estado exatamente igual ao encontrado em produção/na cópia de teste local:
+        # a viagem já ficou com o valor dobrado por uma execução anterior do
+        # comando, antes desta correção existir.
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-25', start_date='2026-08-25', modality='per_ton',
+            tons=Decimal('56.31'), rate_per_ton=Decimal('270'), total_value=Decimal('15203.70'),
+            base_expense_value=Decimal('9778.74'), fuel_expense_value=Decimal('19927.52'),
+            driver_payment=Decimal('1672.41'), expense_value=Decimal('31378.67'),
+        )
+        manual = [
+            ('other', Decimal('50.00')), ('other', Decimal('104.00')), ('other', Decimal('104.00')),
+            ('other', Decimal('104.40')), ('fuel', Decimal('1340.00')), ('fuel', Decimal('4737.50')),
+            ('other', Decimal('3980.00')), ('other', Decimal('247.00')), ('other', Decimal('299.97')),
+            ('fuel', Decimal('3886.26')),
+        ]
+        for cat, amount in manual:
+            TripMovement.objects.create(
+                trip=trip, date='2026-08-25', movement_type='expense', expense_category=cat,
+                category=None, amount=amount, is_auto_generated=False,
+            )
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='other',
+            category=None, amount=Decimal('9778.74'), is_auto_generated=True,
+        )
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='fuel',
+            category=None, amount=Decimal('19927.52'), is_auto_generated=True,
+        )
+
+        call_command('fix_trip_expense_corruption')
+
+        trip.refresh_from_db()
+        self.assertEqual(trip.base_expense_value, Decimal('4889.37'))
+        self.assertEqual(trip.fuel_expense_value, Decimal('9963.76'))
+        self.assertEqual(trip.expense_value, Decimal('16525.54'))
