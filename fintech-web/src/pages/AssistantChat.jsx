@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { assistantService } from '../services/assistant';
+import { todayLocalISO } from '../utils/format';
 
 const INTENT_LABELS = {
   finance_transaction: 'Lançamento financeiro',
@@ -82,7 +83,7 @@ const FIELD_SELECT_OPTIONS = {
 const TEMPLATE_STORAGE_KEY = 'assistant_client_templates_v1';
 
 function getTodayIso() {
-  return new Date().toISOString().split('T')[0];
+  return todayLocalISO();
 }
 
 const CLIENT_PROMPT_SCRIPTS = [
