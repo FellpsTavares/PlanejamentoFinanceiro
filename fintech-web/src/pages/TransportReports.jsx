@@ -48,8 +48,8 @@ const COLUMNS = {
     { key: 'modality_label', label: 'Modalidade' },
     { key: 'status_label', label: 'Status' },
     { key: 'total_value', label: 'Bruto (R$)', align: 'right', currency: true },
-    { key: 'expense_value', label: 'Despesas (R$)', align: 'right', currency: true },
-    { key: 'driver_payment', label: 'Motorista (R$)', align: 'right', currency: true },
+    { key: 'expense_value', label: 'Despesas c/ Motorista (R$)', align: 'right', currency: true },
+    { key: 'driver_payment', label: 'dos quais, Motorista (R$)', align: 'right', currency: true },
     { key: 'net_value', label: 'Líquido (R$)', align: 'right', currency: true },
     { key: 'description', label: 'Descrição' },
   ],
@@ -67,8 +67,8 @@ const COLUMNS = {
     { key: 'vehicle', label: 'Veículo' },
     { key: 'trip_count', label: 'Viagens', align: 'right' },
     { key: 'total_value', label: 'Bruto (R$)', align: 'right', currency: true },
-    { key: 'expense_value', label: 'Despesas (R$)', align: 'right', currency: true },
-    { key: 'driver_payment', label: 'Motorista (R$)', align: 'right', currency: true },
+    { key: 'expense_value', label: 'Despesas c/ Motorista (R$)', align: 'right', currency: true },
+    { key: 'driver_payment', label: 'dos quais, Motorista (R$)', align: 'right', currency: true },
     { key: 'net_value', label: 'Líquido (R$)', align: 'right', currency: true },
   ],
   summary: [
@@ -115,15 +115,19 @@ const ORDER_BY_OPTIONS = {
 // ─── Tradução dos rótulos dos agregados ───────────────────────────────────────
 
 const AGGREGATE_LABELS = {
-  total_expense: 'Total Despesas',
+  // "Despesas" aqui é a soma de Trip.expense_value, que já inclui o pagamento
+  // ao motorista somado dentro do valor (não é um total separado). O rótulo
+  // deixa isso explícito para não somar Despesas + Motorista por engano — o
+  // motorista mostrado ao lado é só o detalhamento de uma parte desse total.
+  total_expense: 'Total Despesas (já inclui motorista)',
   total_revenue: 'Total Receitas',
   balance: 'Saldo',
   total_value: 'Valor Bruto',
-  total_driver: 'Total Motorista',
+  total_driver: 'dos quais, Motorista',
   total_net: 'Líquido',
   total_driver_payments: 'Total Pagamentos ao Motorista',
   grand_total_value: 'Valor Bruto Total',
-  grand_expense_value: 'Despesas Total',
+  grand_expense_value: 'Despesas Total (já inclui motorista)',
   grand_net_value: 'Líquido Total',
   grand_total: 'Total Geral',
   total_distance_km: 'Distância Percorrida',
