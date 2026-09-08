@@ -143,6 +143,22 @@ STATUS_LABELS = {
 }
 
 
+def _movement_category_label(movement):
+    """
+    Nome de exibição da categoria de um lançamento. Prioriza o nome real da
+    categoria configurável escolhida pelo usuário (finance.Category) — inclusive
+    categorias criadas por ele, não só as 3 padrão do sistema. `expense_category`
+    é só o bucket interno de agregação (fuel/other/driver) usado para somar
+    base_expense_value/fuel_expense_value; toda categoria personalizada cai no
+    bucket 'other', então usar o bucket como rótulo faz qualquer categoria própria
+    aparecer como "Outros gastos". Cai para o rótulo do bucket apenas em
+    lançamentos antigos, de antes desse campo existir, sem categoria vinculada.
+    """
+    if movement.category_id:
+        return movement.category.name
+    return MOVEMENT_CATEGORY_LABELS.get(movement.expense_category, movement.expense_category)
+
+
 def _parse_bool_param(value):
     return str(value).lower() in ('1', 'true', 'yes')
 
@@ -369,7 +385,7 @@ class TransportReportView(APIView):
 
         qs = TripMovement.objects.filter(
             trip__vehicle__tenant=tenant
-        ).select_related('trip__vehicle')
+        ).select_related('trip__vehicle', 'category')
 
         if start:
             qs = qs.filter(date__gte=start)
@@ -404,7 +420,8 @@ class TransportReportView(APIView):
                 'movement_type': m.movement_type,
                 'movement_type_label': MOVEMENT_TYPE_LABELS.get(m.movement_type, m.movement_type),
                 'expense_category': m.expense_category,
-                'expense_category_label': MOVEMENT_CATEGORY_LABELS.get(m.expense_category, m.expense_category),
+                'expense_category_label': _movement_category_label(m),
+                'category_id': m.category_id,
                 'amount': str(amount),
                 'description': m.description,
             })
@@ -656,8 +673,14 @@ class TransportReportView(APIView):
         if vehicle_ids is not None:
             qs = qs.filter(trip__vehicle_id__in=vehicle_ids)
 
+        # Agrupa pela categoria real (category_id/nome) e não pelo bucket interno
+        # expense_category (fuel/other/driver): toda categoria personalizada cai no
+        # bucket 'other', então agrupar só por expense_category juntaria todas as
+        # categorias próprias do usuário numa única linha "Outros gastos". Incluir
+        # expense_category no group by também separa lançamentos antigos sem
+        # categoria vinculada (category_id nulo) entre Combustível/Outros gastos.
         agg = (
-            qs.values('expense_category')
+            qs.values('category_id', 'category__name', 'expense_category')
             .annotate(total=Sum('amount'), count=Count('id'))
             .order_by('-total')
         )
@@ -668,9 +691,11 @@ class TransportReportView(APIView):
         for row in agg:
             t = row['total'] or Decimal('0')
             grand_total += t
+            label = row['category__name'] or MOVEMENT_CATEGORY_LABELS.get(row['expense_category'], row['expense_category'])
             rows.append({
+                'category_id': row['category_id'],
                 'expense_category': row['expense_category'],
-                'expense_category_label': MOVEMENT_CATEGORY_LABELS.get(row['expense_category'], row['expense_category']),
+                'expense_category_label': label,
                 'total': str(t),
                 'count': row['count'],
             })
@@ -881,6 +906,7 @@ class TransportReportView(APIView):
         movements_qs = (
             TripMovement.objects.filter(trip__vehicle=vehicle, date__gte=start, date__lte=end)
             .exclude(expense_category='driver')
+            .select_related('category')
             .order_by('date', 'id')
         )
 
@@ -891,9 +917,14 @@ class TransportReportView(APIView):
 
         for m in movements_qs:
             amount = m.amount or Decimal('0')
+            label = _movement_category_label(m)
             if m.movement_type == 'expense':
                 total_movement_expense += amount
-                cat = category_totals.setdefault(m.expense_category, {'total': Decimal('0'), 'count': 0})
+                # Agrupa pela categoria real (category_id), não pelo bucket
+                # expense_category — senão toda categoria personalizada do usuário
+                # (que cai no bucket 'other') seria somada junto como "Outros gastos".
+                cat_key = m.category_id or m.expense_category
+                cat = category_totals.setdefault(cat_key, {'label': label, 'total': Decimal('0'), 'count': 0})
                 cat['total'] += amount
                 cat['count'] += 1
             else:
@@ -902,14 +933,14 @@ class TransportReportView(APIView):
             movement_rows.append([
                 _fmt_date(m.date),
                 MOVEMENT_TYPE_LABELS.get(m.movement_type, m.movement_type),
-                MOVEMENT_CATEGORY_LABELS.get(m.expense_category, m.expense_category) if m.movement_type == 'expense' else '—',
+                label if m.movement_type == 'expense' else '—',
                 _fmt_money(amount),
                 m.description or '—',
             ])
 
         category_rows = [
-            [MOVEMENT_CATEGORY_LABELS.get(cat, cat), str(info['count']), _fmt_money(info['total'])]
-            for cat, info in sorted(category_totals.items(), key=lambda kv: kv[1]['total'], reverse=True)
+            [info['label'], str(info['count']), _fmt_money(info['total'])]
+            for info in sorted(category_totals.values(), key=lambda v: v['total'], reverse=True)
         ]
 
         # ---- Consumo de combustível do período ----
