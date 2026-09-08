@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from rest_framework import status
@@ -481,3 +482,64 @@ class TripMovementApiFlowTests(APITestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data['end_date'], '2026-09-05')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class MonthlyClosingReportDriverPaymentTests(APITestCase):
+    """
+    Regra: o relatório de fechamento mensal não pode contar o pagamento ao
+    motorista duas vezes. Antes da correção, o lançamento automático gerado na
+    categoria Salário/Comissão (criado por Trip.sync_expense_movements) entrava
+    na soma "despesas lançadas no período" (que deveria ser só combustível +
+    outros gastos) e o mesmo valor era somado de novo via total_driver_payment
+    (Trip.driver_payment), inflando a despesa e reduzindo o resultado do período
+    a mais do que deveria.
+    """
+
+    def setUp(self):
+        self.tenant, self.user = make_authenticated_tenant_user(self, slug='fechamento-tenant')
+        self.vehicle = make_vehicle(self.tenant, plate='FEC1H01')
+        self.trip = Trip.objects.create(
+            vehicle=self.vehicle,
+            date='2026-09-05',
+            start_date='2026-09-05',
+            end_date='2026-09-05',
+            modality='per_ton',
+            tons=Decimal('10'),
+            rate_per_ton=Decimal('1000'),
+            # total_value normalmente é calculado por TripSerializer._compute_values()
+            # (não pelo model); como este teste cria a viagem direto via ORM, setamos
+            # à mão para refletir tons * rate_per_ton = 10000.
+            total_value=Decimal('10000'),
+            base_expense_value=Decimal('200'),
+            fuel_expense_value=Decimal('300'),
+            driver_payment=Decimal('400'),
+        )
+        self.trip.sync_expense_movements()  # gera os lançamentos automáticos, incluindo o de salário
+
+    def _get_financial_summary(self):
+        with patch('transport.report_views.TransportReportView._build_monthly_closing_pdf', return_value=b'%PDF-fake') as mocked:
+            resp = self.client.get('/api/transport/reports/', {
+                'report_type': 'monthly_closing',
+                'vehicle_id': str(self.vehicle.id),
+                'start_date': '2026-09-01',
+                'end_date': '2026-09-30',
+            })
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, getattr(resp, 'data', resp.content))
+        self.assertEqual(mocked.call_count, 1)
+        return dict(mocked.call_args.kwargs['financial_summary'])
+
+    def test_driver_payment_movement_is_excluded_from_general_expenses_total(self):
+        summary = self._get_financial_summary()
+        # base_expense_value (200) + fuel_expense_value (300) = 500, SEM o salário
+        self.assertEqual(summary['Despesas lançadas no período (combustível + outros gastos)'], 'R$ 500,00')
+
+    def test_driver_payment_is_reported_once_in_its_own_line(self):
+        summary = self._get_financial_summary()
+        self.assertEqual(summary['Pagamento ao motorista (viagens do período)'], 'R$ 400,00')
+
+    def test_period_result_does_not_double_count_driver_payment(self):
+        summary = self._get_financial_summary()
+        # total_value (10000) - despesas gerais (500) - motorista (400) = 9100.
+        # Antes da correção, o resultado saía 8700 (motorista descontado 2x).
+        self.assertEqual(summary['Resultado do período'], 'R$ 9.100,00')
