@@ -6,7 +6,7 @@ export default function ModuleRoute({ children, moduleFlag }) {
   const user = authService.getCurrentUser();
   const hasModule = user?.tenant?.[moduleFlag];
   if (!hasModule) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/painel" replace />;
   }
   return children;
 }
