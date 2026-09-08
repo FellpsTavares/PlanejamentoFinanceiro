@@ -238,13 +238,32 @@ class Trip(models.Model):
 
     def sync_expense_movements(self):
         """
-        Sincroniza os gastos (base_expense_value, fuel_expense_value e expense_items) 
+        Sincroniza os gastos (base_expense_value, fuel_expense_value e expense_items)
         criando TripMovement automaticamente para que apareçam nos relatórios.
         IMPORTANTE: Deleta apenas movimentações automáticas, preservando as manuais.
         """
         from decimal import Decimal
         import re
-        
+
+        # Guarda os valores em variáveis locais ANTES de apagar os lançamentos
+        # antigos. Isso é essencial: `self.movements` é o related manager reverso
+        # da FK, e o Django faz cache do objeto "pai" nos registros retornados por
+        # ele — então, dentro do sinal post_delete disparado por
+        # `existing_auto_movements.delete()` logo abaixo, `instance.trip` acaba
+        # sendo este MESMO objeto `self` (não uma cópia nova buscada do banco).
+        # O sinal chama `self.trip.recalculate_from_movements()`, que zera
+        # base_expense_value/fuel_expense_value nesse mesmo `self` (porque os
+        # lançamentos antigos já foram apagados) e salva isso no banco — antes
+        # deste método sequer recriar os lançamentos novos. Sem este snapshot, as
+        # checagens abaixo (`self.base_expense_value > 0` etc.) liam os valores já
+        # zerados, então os lançamentos de combustível/outros gastos deixavam de
+        # ser recriados e a viagem ficava com valores errados persistidos no banco.
+        base_expense_value = self.base_expense_value
+        fuel_expense_value = self.fuel_expense_value
+        driver_payment = self.driver_payment
+        expense_items = self.expense_items
+        description = self.description
+
         # Limpar APENAS movements automáticos anteriores (não deletar os manuais!)
         trip_date = self.start_date or self.date
         existing_auto_movements = self.movements.filter(
@@ -252,13 +271,13 @@ class Trip(models.Model):
             is_auto_generated=True
         )
         existing_auto_movements.delete()
-        
+
         # 1. Criar movimentações de gastos individuais (expense_items)
-        if self.expense_items:
-            for item in self.expense_items:
+        if expense_items:
+            for item in expense_items:
                 valor = Decimal(str(item.get('valor', 0)))
                 descricao = item.get('descricao', 'Outros gastos')
-                
+
                 if valor > 0:
                     TripMovement.objects.create(
                         trip=self,
@@ -270,42 +289,42 @@ class Trip(models.Model):
                         is_auto_generated=True  # Marcar como automática
                     )
         # 2. Se não tem expense_items, usar base_expense_value (compatibilidade)
-        elif self.base_expense_value and self.base_expense_value > 0:
+        elif base_expense_value and base_expense_value > 0:
             # Extrair descrição do gasto usando marcador [GASTO:...] ou padrão legacy
             gasto_desc = None
-            if self.description:
-                match = re.search(r'\[GASTO:([^\]]+)\]', self.description)
+            if description:
+                match = re.search(r'\[GASTO:([^\]]+)\]', description)
                 if match:
                     gasto_desc = match.group(1).strip()
-                elif ' | ' in self.description:
-                    parts = self.description.split(' | ')
+                elif ' | ' in description:
+                    parts = description.split(' | ')
                     last_part = parts[-1].strip()
                     last_part = re.sub(r'^Gastos\s+gerais:\s*', '', last_part, flags=re.IGNORECASE)
                     last_part = re.sub(r'\s*(gastos\s+com\s+combust[íi]ve[il]s?|combust[íi]ve[il]s?).*$', '', last_part, flags=re.IGNORECASE)
                     last_part = last_part.strip()
-                    
+
                     if last_part and not any(x in last_part.lower() for x in ['fazenda', 'porto', ' x ', 'ton', 'km']):
                         gasto_desc = last_part
-            
+
             movement_desc = gasto_desc if gasto_desc else ''
             TripMovement.objects.create(
                 trip=self,
                 date=trip_date,
                 movement_type='expense',
                 expense_category='other',
-                amount=self.base_expense_value,
+                amount=base_expense_value,
                 description=movement_desc,
                 is_auto_generated=True  # Marcar como automática
             )
-        
+
         # 3. Criar movement de combustível
-        if self.fuel_expense_value and self.fuel_expense_value > 0:
+        if fuel_expense_value and fuel_expense_value > 0:
             TripMovement.objects.create(
                 trip=self,
                 date=trip_date,
                 movement_type='expense',
                 expense_category='fuel',
-                amount=self.fuel_expense_value,
+                amount=fuel_expense_value,
                 description='Combustível',
                 is_auto_generated=True  # Marcar como automática
             )
@@ -317,7 +336,7 @@ class Trip(models.Model):
         # sendo a fonte da verdade para o cálculo de expense_value (ver
         # TripSerializer._compute_values), então esse movimento NÃO entra no bucket
         # 'other' somado por recalculate_from_movements (ficaria contado em dobro).
-        if self.driver_payment and self.driver_payment > 0 and self.vehicle_id:
+        if driver_payment and driver_payment > 0 and self.vehicle_id:
             from finance.defaults import ensure_default_category
             from finance.models import Category
 
@@ -329,15 +348,26 @@ class Trip(models.Model):
                 movement_type='expense',
                 expense_category='driver',
                 category=salary_category,
-                amount=self.driver_payment,
+                amount=driver_payment,
                 description=driver_desc,
                 is_auto_generated=True,
             )
 
         # Limpar o marcador [GASTO:...] do campo description
-        if self.description and '[GASTO:' in self.description:
-            self.description = re.sub(r'\s*\[GASTO:[^\]]+\]', '', self.description).strip()
-            self.save(update_fields=['description'])
+        if description and '[GASTO:' in description:
+            description = re.sub(r'\s*\[GASTO:[^\]]+\]', '', description).strip()
+
+        # Restaura em `self` (e persiste) os valores corretos capturados no início,
+        # desfazendo qualquer zeragem que o sinal de recálculo tenha causado
+        # durante a exclusão dos lançamentos antigos acima.
+        self.base_expense_value = base_expense_value
+        self.fuel_expense_value = fuel_expense_value
+        self.driver_payment = driver_payment
+        self.expense_value = (base_expense_value or 0) + (fuel_expense_value or 0) + (driver_payment or 0)
+        self.description = description
+        self.save(update_fields=[
+            'base_expense_value', 'fuel_expense_value', 'driver_payment', 'expense_value', 'description',
+        ])
 
 
 class TripMovement(models.Model):
