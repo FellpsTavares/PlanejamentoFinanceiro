@@ -5,7 +5,7 @@ export default function PlatformAdminRoute({ children }) {
   const user = authService.getCurrentUser();
 
   if (!user?.is_platform_admin) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/painel" replace />;
   }
 
   return children;
