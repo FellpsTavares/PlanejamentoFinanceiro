@@ -306,8 +306,30 @@ class Trip(models.Model):
             other_category = ensure_default_category(self.vehicle.tenant, Category.SYSTEM_KEY_OTHER)
             fuel_category = ensure_default_category(self.vehicle.tenant, Category.SYSTEM_KEY_FUEL)
 
+        # Se já existe lançamento MANUAL de uma categoria, o espelho automático
+        # dessa categoria fica redundante: o total já está inteiramente
+        # representado pelos lançamentos manuais (recalculate_from_movements os
+        # soma para preencher base_expense_value/fuel_expense_value). Criar o
+        # espelho mesmo assim duplicava a categoria no Resumo por Categoria de
+        # Despesa (soma bruta de TripMovement.amount por categoria, sem excluir
+        # automáticos) e confundia o usuário na lista de lançamentos da viagem
+        # com um item "Sem descrição" que ele nunca lançou. Só criamos o espelho
+        # quando o valor vem exclusivamente da edição do campo total (sem
+        # lançamento manual nenhum daquela categoria).
+        has_manual_other = self.movements.filter(
+            movement_type='expense', expense_category='other', is_auto_generated=False,
+        ).exists()
+        has_manual_fuel = self.movements.filter(
+            movement_type='expense', expense_category='fuel', is_auto_generated=False,
+        ).exists()
+        has_manual_driver = self.movements.filter(
+            movement_type='expense', expense_category='driver', is_auto_generated=False,
+        ).exists()
+
         # 1. Criar movimentações de gastos individuais (expense_items)
-        if expense_items:
+        if has_manual_other:
+            pass
+        elif expense_items:
             for item in expense_items:
                 valor = Decimal(str(item.get('valor', 0)))
                 descricao = item.get('descricao', 'Outros gastos')
@@ -354,7 +376,7 @@ class Trip(models.Model):
             )
 
         # 3. Criar movement de combustível
-        if fuel_expense_value and fuel_expense_value > 0:
+        if not has_manual_fuel and fuel_expense_value and fuel_expense_value > 0:
             TripMovement.objects.create(
                 trip=self,
                 date=trip_date,
@@ -373,7 +395,7 @@ class Trip(models.Model):
         # sendo a fonte da verdade para o cálculo de expense_value (ver
         # TripSerializer._compute_values), então esse movimento NÃO entra no bucket
         # 'other' somado por recalculate_from_movements (ficaria contado em dobro).
-        if driver_payment and driver_payment > 0 and self.vehicle_id:
+        if not has_manual_driver and driver_payment and driver_payment > 0 and self.vehicle_id:
             from finance.defaults import ensure_default_category
             from finance.models import Category
 

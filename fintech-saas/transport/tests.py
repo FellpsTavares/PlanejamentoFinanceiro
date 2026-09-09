@@ -1032,3 +1032,97 @@ class RecalculateFromMovementsDoesNotDoubleCountTests(TestCase):
         self.assertEqual(trip.base_expense_value, Decimal('4889.37'))
         self.assertEqual(trip.fuel_expense_value, Decimal('9963.76'))
         self.assertEqual(trip.expense_value, Decimal('16525.54'))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class SyncExpenseMovementsSkipsRedundantMirrorTests(APITestCase):
+    """
+    Quando a viagem já tem lançamento MANUAL de uma categoria (fuel/other/driver),
+    sync_expense_movements() não deve criar o espelho automático dessa mesma
+    categoria: o total já está inteiramente representado pelos lançamentos
+    manuais. Criar o espelho mesmo assim tinha dois efeitos ruins observados em
+    produção numa viagem real (#261, GIT2I16): 1) o Resumo por Categoria de
+    Despesa soma TripMovement.amount por categoria sem excluir automáticos, então
+    a categoria aparecia com o dobro do valor real; 2) a lista de lançamentos da
+    viagem mostrava um item extra "Sem descrição"/"Combustível" que o usuário não
+    reconhecia, porque ele nunca criou esse lançamento — o sistema que criou.
+    """
+
+    def setUp(self):
+        self.tenant, self.user = make_authenticated_tenant_user(self, slug='sem-espelho-redundante')
+        self.vehicle = make_vehicle(self.tenant, plate='GIT2I16')
+
+    def test_sync_does_not_create_auto_mirror_when_manual_movements_cover_the_category(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-25', start_date='2026-08-25', modality='per_ton',
+            tons=Decimal('56.31'), rate_per_ton=Decimal('270'), total_value=Decimal('15203.70'),
+            driver_payment=Decimal('1672.41'),
+        )
+        manual = [
+            ('other', Decimal('50.00')), ('other', Decimal('104.00')), ('other', Decimal('104.00')),
+            ('other', Decimal('104.40')), ('fuel', Decimal('1340.00')), ('fuel', Decimal('4737.50')),
+            ('other', Decimal('3980.00')), ('other', Decimal('247.00')), ('other', Decimal('299.97')),
+            ('fuel', Decimal('3886.26')),
+        ]
+        for cat, amount in manual:
+            TripMovement.objects.create(
+                trip=trip, date='2026-08-25', movement_type='expense', expense_category=cat,
+                category=None, amount=amount, is_auto_generated=False,
+            )
+
+        trip.recalculate_from_movements()
+        trip.sync_expense_movements()
+
+        trip.refresh_from_db()
+        self.assertEqual(trip.base_expense_value, Decimal('4889.37'))
+        self.assertEqual(trip.fuel_expense_value, Decimal('9963.76'))
+        self.assertEqual(trip.expense_value, Decimal('16525.54'))
+
+        auto_movements = trip.movements.filter(is_auto_generated=True)
+        self.assertEqual(auto_movements.filter(expense_category='other').count(), 0)
+        self.assertEqual(auto_movements.filter(expense_category='fuel').count(), 0)
+        # O motorista não tem lançamento manual equivalente nesta viagem, então o
+        # espelho de driver continua sendo criado normalmente.
+        self.assertEqual(auto_movements.filter(expense_category='driver').count(), 1)
+        self.assertEqual(trip.movements.count(), 11)
+
+    def test_summary_report_does_not_double_a_category_that_has_manual_and_would_be_mirror(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-25', start_date='2026-08-25', modality='per_ton',
+            tons=Decimal('56.31'), rate_per_ton=Decimal('270'), total_value=Decimal('15203.70'),
+        )
+        fuel_category = Category.objects.get(tenant=self.tenant, system_key='fuel')
+        TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='fuel',
+            category=fuel_category, amount=Decimal('300'), is_auto_generated=False,
+        )
+        trip.recalculate_from_movements()
+        trip.sync_expense_movements()
+
+        resp = self.client.get('/api/transport/reports/', {'report_type': 'summary'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        fuel_rows = [row for row in resp.data['rows'] if row['expense_category_label'] == 'Combustível']
+        self.assertEqual(len(fuel_rows), 1)
+        self.assertEqual(fuel_rows[0]['total'], '300.00')
+        self.assertEqual(fuel_rows[0]['count'], 1)
+
+    def test_deleting_all_manual_movements_lets_the_mirror_come_back(self):
+        trip = Trip.objects.create(
+            vehicle=self.vehicle, date='2026-08-25', start_date='2026-08-25', modality='per_ton',
+            tons=Decimal('56.31'), rate_per_ton=Decimal('270'), total_value=Decimal('15203.70'),
+        )
+        manual = TripMovement.objects.create(
+            trip=trip, date='2026-08-25', movement_type='expense', expense_category='fuel',
+            category=None, amount=Decimal('300'), is_auto_generated=False,
+        )
+        trip.recalculate_from_movements()
+        trip.sync_expense_movements()
+        self.assertEqual(trip.movements.filter(is_auto_generated=True, expense_category='fuel').count(), 0)
+
+        manual.delete()
+        trip.refresh_from_db()
+        trip.sync_expense_movements()
+
+        auto_fuel = trip.movements.filter(is_auto_generated=True, expense_category='fuel')
+        self.assertEqual(auto_fuel.count(), 1)
+        self.assertEqual(auto_fuel.first().amount, Decimal('300'))
