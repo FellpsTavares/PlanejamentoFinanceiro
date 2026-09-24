@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
-import Sidebar from './Sidebar';
+import Topbar from './Topbar';
 import AppHeader from './AppHeader';
 
 export default function ProtectedRoute({ children }) {
@@ -19,8 +19,8 @@ export default function ProtectedRoute({ children }) {
 
   return (
     <>
-      <Sidebar />
-      <div className="pl-16 min-h-screen bg-white">
+      <Topbar />
+      <div className="pt-[106px] min-h-screen bg-white">
         <AppHeader />
         <div className="pt-2">{children}</div>
       </div>
