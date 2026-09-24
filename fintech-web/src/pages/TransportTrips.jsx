@@ -11,6 +11,54 @@ import ToggleSwitch from '../components/ToggleSwitch';
 import { formatDecimalString, formatQuantityDisplay, normalizeInputDecimal, formatApiDate, todayLocalISO } from '../utils/format';
 import { multiplyDecimalStrings, subtractDecimalStrings } from '../utils/decimal';
 
+const SearchIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m0 0a7.5 7.5 0 10-10.607 0 7.5 7.5 0 0010.607 0z" />
+  </svg>
+);
+
+const FilterIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 5.25h16.5l-6.25 7.5v5.5l-4 2v-7.5l-6.25-7.5z" />
+  </svg>
+);
+
+const ClearIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const PencilIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.06 2.06 0 112.914 2.914L7.5 19.677l-4 1 1-4L16.862 4.487z" />
+  </svg>
+);
+
+const TrashIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 7h12M9.5 7V5a1 1 0 011-1h3a1 1 0 011 1v2m-7 0l.75 12.5a1 1 0 001 .95h5.5a1 1 0 001-.95L17 7" />
+  </svg>
+);
+
+const FuelIcon = (props) => (
+  <svg className={props.className || 'h-3.5 w-3.5'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4 21V5a1 1 0 011-1h6a1 1 0 011 1v16M4 21h8m0 0h4m-4 0v-8h2.5l2.85 2.85A1 1 0 0120 16.56V19a2 2 0 01-2 2h-1M6.5 8h4" />
+  </svg>
+);
+
+const RefreshIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992V4.356M19.5 9.5A7.5 7.5 0 106.34 15.66M4.5 14.5A7.5 7.5 0 0017.66 8.34" />
+  </svg>
+);
+
+const CheckIcon = (props) => (
+  <svg className={props.className || 'h-4 w-4'} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+  </svg>
+);
+
 const EMPTY_FUEL_FORM = {
   date: '',
   fuel_type: 'diesel',
@@ -47,6 +95,7 @@ export default function TransportTrips() {
   const [movementTab, setMovementTab] = useState('manual'); // 'manual' | 'fuel'
   const [fuelForm, setFuelForm] = useState(EMPTY_FUEL_FORM);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [confirmDeleteMovement, setConfirmDeleteMovement] = useState(null);
   const [confirmReopenOpen, setConfirmReopenOpen] = useState(false);
 
@@ -64,7 +113,6 @@ export default function TransportTrips() {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [searching, setSearching] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [showInProgressExpanded, setShowInProgressExpanded] = useState(true);
 
   const parseMoney = (value) => {
     if (!value) return 0;
@@ -206,21 +254,23 @@ export default function TransportTrips() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expenseCategories]);
 
+  const runFilterSearch = async () => {
+    try {
+      setSearching(true);
+      const params = {};
+      if (selectedVehicle) params.vehicle = selectedVehicle;
+      if (filterStartDate) params.start = filterStartDate;
+      if (filterEndDate) params.end = filterEndDate;
+      if (filterReceived && filterReceived !== 'all') params.is_received = filterReceived === 'received' ? '1' : '0';
+      await loadTrips(params);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   // auto-run search when selected vehicle or received filter changes
   useEffect(() => {
-    (async () => {
-      try {
-        setSearching(true);
-        const params = {};
-        if (selectedVehicle) params.vehicle = selectedVehicle;
-        if (filterStartDate) params.start = filterStartDate;
-        if (filterEndDate) params.end = filterEndDate;
-        if (filterReceived && filterReceived !== 'all') params.is_received = filterReceived === 'received' ? '1' : '0';
-        await loadTrips(params);
-      } finally {
-        setSearching(false);
-      }
-    })();
+    runFilterSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVehicle, filterReceived]);
 
@@ -495,6 +545,39 @@ export default function TransportTrips() {
     return <LoadingOverlay message="Carregando viagens..." />;
   }
 
+  const inProgressFiltered = inProgressTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t));
+  const completedFiltered = completedTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t));
+  const carouselTrips = showCompleted ? completedFiltered : inProgressFiltered;
+
+  const renderTripCard = (trip) => {
+    const isSelected = String(selectedTripId) === String(trip.id);
+    const isCompleted = trip.status === 'completed';
+    const stageIndex = progressTypeOptions.indexOf(trip.progress_type);
+    const progressPct = isCompleted
+      ? 100
+      : (stageIndex >= 0 ? Math.round(((stageIndex + 1) / progressTypeOptions.length) * 100) : 0);
+    const cardDate = isCompleted ? (trip.end_date || trip.date) : (trip.start_date || trip.date);
+    return (
+      <button
+        key={trip.id}
+        type="button"
+        onClick={() => setSelectedTripId(String(trip.id))}
+        className={`shrink-0 text-left w-44 p-3 rounded-lg border transition-colors ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}
+      >
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="font-semibold text-sm text-gray-900 truncate">{trip.vehicle_plate || '—'}</span>
+          <span className={`h-2 w-2 rounded-full shrink-0 ${trip.status === 'in_progress' ? 'bg-green-500' : 'bg-gray-400'}`} />
+        </div>
+        <div className="text-xs text-gray-500 mb-2 truncate">
+          {formatApiDate(cardDate)} · {trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}
+        </div>
+        <div className="h-1 rounded-full bg-gray-200 overflow-hidden">
+          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${progressPct}%` }} />
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -505,317 +588,277 @@ export default function TransportTrips() {
         <Link to="/transportadora/viagens/nova" className="btn btn-primary">Nova Viagem</Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="card p-4 border rounded lg:col-span-1 relative z-20">
-          {/* Busca sempre visível + filtros recolhidos atrás de um botão, para não ocupar
-              espaço vertical acima da lista de viagens quando não estão em uso. */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2">
-              <select
-                aria-label="Selecionar veículo"
-                className="input input-sm flex-1"
-                value={selectedVehicle}
-                onChange={(e) => setSelectedVehicle(e.target.value)}
-              >
-                <option value="">Todos os veículos</option>
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
-                ))}
-              </select>
+      <div className="card p-3 relative z-20">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <span className="text-sm font-semibold text-gray-700">
+            {showCompleted ? `Concluídas · ${completedFiltered.length}` : `Em andamento · ${inProgressFiltered.length}`}
+          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              onClick={() => setShowCompleted((s) => !s)}
+            >
+              {showCompleted ? '← Ver em andamento' : `Ver concluídas (${completedFiltered.length}) →`}
+            </button>
+
+            <div className="h-5 w-px bg-gray-200" />
+
+            <div className="relative">
               <button
                 type="button"
-                className={`h-9 px-3 rounded-md border flex items-center gap-1.5 text-sm font-medium ${filtersOpen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
-                onClick={() => setFiltersOpen((o) => !o)}
+                aria-label="Buscar viagem"
+                className={`h-9 w-9 rounded-md border flex items-center justify-center ${searchOpen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50 text-gray-600'}`}
+                onClick={() => { setSearchOpen((o) => !o); setFiltersOpen(false); }}
               >
-                Filtros
-                <svg xmlns="http://www.w3.org/2000/svg" className={`h-3.5 w-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                </svg>
+                <SearchIcon />
               </button>
+              {searchOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setSearchOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-40 w-72 max-w-[90vw] bg-white border rounded-lg shadow-lg p-3">
+                    <label className="text-xs text-gray-600 font-medium">Filtrar por veículo</label>
+                    <select
+                      aria-label="Selecionar veículo"
+                      className="input input-sm w-full mt-1"
+                      value={selectedVehicle}
+                      onChange={(e) => setSelectedVehicle(e.target.value)}
+                      autoFocus
+                    >
+                      <option value="">Todos os veículos</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.id}>{v.plate || v.name || `#${v.id}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
 
-            {filtersOpen && (
-              <div className="mt-2 p-3 bg-white border rounded shadow-sm">
-                <div className="flex flex-col gap-3">
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:gap-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 w-full">
-                      <div className="flex flex-col w-full sm:w-auto">
+            <div className="relative">
+              <button
+                type="button"
+                aria-label="Filtros"
+                className={`h-9 w-9 rounded-md border flex items-center justify-center ${filtersOpen ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white hover:bg-gray-50 text-gray-600'}`}
+                onClick={() => { setFiltersOpen((o) => !o); setSearchOpen(false); }}
+              >
+                <FilterIcon />
+              </button>
+              {filtersOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setFiltersOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 z-40 w-80 max-w-[90vw] bg-white border rounded-lg shadow-lg p-3 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:gap-3 gap-2">
+                      <div className="flex flex-col flex-1">
                         <label className="text-xs text-gray-600">Data início</label>
                         <input
                           type="date"
                           aria-label="Data início"
-                          className="input input-sm w-full sm:w-44"
+                          className="input input-sm w-full"
                           value={filterStartDate}
                           onChange={(e) => setFilterStartDate(e.target.value)}
                         />
                       </div>
-                      <div className="flex flex-col w-full sm:w-auto">
+                      <div className="flex flex-col flex-1">
                         <label className="text-xs text-gray-600">Data fim</label>
                         <input
                           type="date"
                           aria-label="Data fim"
-                          className="input input-sm w-full sm:w-44"
+                          className="input input-sm w-full"
                           value={filterEndDate}
                           onChange={(e) => setFilterEndDate(e.target.value)}
                         />
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="w-full sm:w-auto">
-                      <div className="flex items-center gap-2">
-                        <select
-                          aria-label="Filtrar por recebido"
-                          className="input input-sm w-full sm:w-36"
-                          value={filterReceived}
-                          onChange={(e) => setFilterReceived(e.target.value)}
-                        >
-                          <option value="all">Todos</option>
-                          <option value="received">Recebidas</option>
-                          <option value="not_received">Não recebidas</option>
-                        </select>
-                        <button
-                          type="button"
-                          aria-label="Pesquisar"
-                          className="h-9 px-3 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
-                          onClick={async () => {
-                            try {
-                              setSearching(true);
-                              const params = {};
-                              if (selectedVehicle) params.vehicle = selectedVehicle;
-                              if (filterStartDate) params.start = filterStartDate;
-                              if (filterEndDate) params.end = filterEndDate;
-                              if (filterReceived && filterReceived !== 'all') params.is_received = filterReceived === 'received' ? '1' : '0';
-                              await loadTrips(params);
-                            } finally {
-                              setSearching(false);
-                            }
-                          }}
-                          disabled={searching}
-                        >
-                          {searching ? (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="animate-spin h-4 w-4 text-gray-600" viewBox="0 0 24 24" fill="none">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                            </svg>
-                          ) : (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M12.9 14.32a8 8 0 111.414-1.414l4.387 4.387a1 1 0 01-1.414 1.414l-4.387-4.387zM8 14a6 6 0 100-12 6 6 0 000 12z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          aria-label="Limpar filtros"
-                          className="h-9 px-2 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
-                          onClick={async () => {
-                            setSelectedVehicle('');
-                            setFilterStartDate('');
-                            setFilterEndDate('');
-                            setFilterReceived('all');
-                            await loadTrips();
-                          }}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-2.293-9.707a1 1 0 011.414 0L10 8.586l.879-.879a1 1 0 111.414 1.414L11.414 10l.879.879a1 1 0 11-1.414 1.414L10 11.414l-.879.879a1 1 0 11-1.414-1.414L8.586 10l-.879-.879a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <div className="flex items-center gap-2">
+                      <select
+                        aria-label="Filtrar por recebido"
+                        className="input input-sm flex-1"
+                        value={filterReceived}
+                        onChange={(e) => setFilterReceived(e.target.value)}
+                      >
+                        <option value="all">Todos</option>
+                        <option value="received">Recebidas</option>
+                        <option value="not_received">Não recebidas</option>
+                      </select>
+                      <button
+                        type="button"
+                        aria-label="Pesquisar"
+                        className="h-9 px-3 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
+                        onClick={runFilterSearch}
+                        disabled={searching}
+                      >
+                        {searching ? (
+                          <svg className="animate-spin h-4 w-4 text-gray-600" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                           </svg>
-                        </button>
-                      </div>
+                        ) : (
+                          <SearchIcon className="h-4 w-4 text-gray-600" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Limpar filtros"
+                        className="h-9 px-2 rounded-md bg-white border hover:bg-gray-50 flex items-center justify-center"
+                        onClick={async () => {
+                          setSelectedVehicle('');
+                          setFilterStartDate('');
+                          setFilterEndDate('');
+                          setFilterReceived('all');
+                          await loadTrips();
+                        }}
+                      >
+                        <ClearIcon className="h-4 w-4 text-gray-600" />
+                      </button>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Em curso ({inProgressTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t)).length})</h2>
-            <button className="btn btn-sm" onClick={() => setShowInProgressExpanded((s) => !s)}>
-              {showInProgressExpanded ? 'Ocultar' : 'Expandir'}
-            </button>
-          </div>
-          {showInProgressExpanded && (
-            <div className="space-y-2">
-              {inProgressTrips.length === 0 && <p className="text-sm text-gray-500">Nenhuma viagem em andamento.</p>}
-              {inProgressTrips
-                .filter((trip) => tripInDateRange(trip) && tripMatchesSearch(trip))
-                .map((trip) => (
-                <button
-                  key={trip.id}
-                  type="button"
-                  onClick={() => setSelectedTripId(String(trip.id))}
-                  className={`w-full text-left p-2 rounded border flex items-center justify-between ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                >
-                  <div>
-                    <div className="font-medium text-sm">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
-                    <div className="text-xs text-gray-600">{formatApiDate(trip.start_date || trip.date)}</div>
-                    <div className="text-xs text-gray-500 truncate" style={{ maxWidth: 240 }}>{trip.description || ''}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold">{formatBRL(trip.total_value)}</div>
-                    <div className="text-xs text-gray-500">{trip.driver_name || trip.vehicle_plate || ''}</div>
-                  </div>
-                </button>
-              ))}
+                </>
+              )}
             </div>
-          )}
-
-          <div className="mt-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold">Encerradas ({completedTrips.filter((t) => tripInDateRange(t) && tripMatchesSearch(t)).length})</h2>
-              <button className="btn btn-sm" onClick={() => setShowCompleted((s) => !s)}>
-                {showCompleted ? 'Ocultar' : 'Mostrar'} encerradas
-              </button>
-            </div>
-            {showCompleted && (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {completedTrips.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhuma viagem encerrada.</p>
-                  ) : (
-                  completedTrips.filter((trip) => tripInDateRange(trip) && tripMatchesSearch(trip)).map((trip) => (
-                    <button
-                      key={trip.id}
-                      type="button"
-                      onClick={() => setSelectedTripId(String(trip.id))}
-                      className={`w-full text-left p-2 rounded border flex items-center justify-between ${String(selectedTripId) === String(trip.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                    >
-                      <div>
-                        <div className="font-medium text-sm">{trip.modality === 'per_ton' ? 'Por Tonelada' : 'Arrendamento'}</div>
-                        <div className="text-xs text-gray-600">{formatApiDate(trip.end_date || trip.date)}</div>
-                        <div className="text-xs text-gray-500 truncate" style={{ maxWidth: 240 }}>{trip.description || ''}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-semibold">{formatBRL(trip.net_value)}</div>
-                        <div className="text-xs text-gray-500">{trip.driver_name || trip.vehicle_plate || ''}</div>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="card p-4 border rounded lg:col-span-2 relative z-10">
-          {!selectedTrip ? (
-            <p className="text-sm text-gray-500">Selecione uma viagem para gerenciar.</p>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">
-                  Viagem {selectedTrip.status === 'in_progress' ? 'em curso' : 'encerrada'}
-                </h2>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => navigate(`/transportadora/viagens/nova?trip=${selectedTrip.id}`)}
-                >
-                  Abrir edição completa
-                </button>
-              </div>
+        <div className="flex gap-3 overflow-x-auto flex-nowrap pb-1">
+          {carouselTrips.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4">
+              {showCompleted ? 'Nenhuma viagem encerrada.' : 'Nenhuma viagem em andamento.'}
+            </p>
+          ) : carouselTrips.map((trip) => renderTripCard(trip))}
+        </div>
+      </div>
 
-              {/* Veículo e dados da carga em destaque */}
-              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Veículo</div>
-                  <div className="text-lg font-bold text-blue-900">{selectedTrip.vehicle_plate || '—'}</div>
-                  {selectedTrip.vehicle_model && (
-                    <div className="text-sm text-blue-800">{selectedTrip.vehicle_model}</div>
+      {!selectedTrip ? (
+        <div className="card p-6 text-center text-sm text-gray-500">Selecione uma viagem para gerenciar.</div>
+      ) : (
+        <div className="space-y-4">
+          <div className="card p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Veículo</div>
+                <div className="text-lg font-bold text-gray-900">{selectedTrip.vehicle_plate || '—'}</div>
+                {selectedTrip.vehicle_model && (
+                  <div className="text-sm text-gray-600">{selectedTrip.vehicle_model}</div>
+                )}
+              </div>
+              {selectedTrip.status === 'in_progress' ? (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-semibold">Em curso</span>
+              ) : (
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold">Encerrada</span>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              {selectedTrip.modality === 'per_ton' && (
+                <div className="text-right">
+                  <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Valor por tonelada</div>
+                  <div className="text-base font-bold text-gray-900">{formatBRL(selectedTrip.rate_per_ton)}</div>
+                  <div className="text-xs text-gray-500">{formatQuantityDisplay(selectedTrip.tons)} ton informadas</div>
+                </div>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => navigate(`/transportadora/viagens/nova?trip=${selectedTrip.id}`)}
+              >
+                Abrir edição completa
+              </button>
+            </div>
+          </div>
+
+          <div className="card p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">Andamento da viagem</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium">Data início</label>
+                <input type="date" className="input-field w-full" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Data fim</label>
+                <input type="date" className="input-field w-full" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Andamento da viagem</label>
+                <select className="input-field w-full" value={progressType} onChange={(e) => setProgressType(e.target.value)} disabled={selectedTrip.status !== 'in_progress'}>
+                  <option value="">Selecione...</option>
+                  {progressTypeOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium">KM inicial</label>
+                <input className="input-field w-full" value={initialKm} onChange={(e) => setInitialKm(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">KM final</label>
+                <input className="input-field w-full" value={finalKm} onChange={(e) => setFinalKm(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+              </div>
+              <div className="pb-2">
+                <ToggleSwitch
+                  checked={isReceived}
+                  onChange={setIsReceived}
+                  label="Valor da viagem já recebido"
+                  disabled={selectedTrip.status !== 'in_progress'}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Observações da viagem</label>
+              <textarea className="input-field w-full" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-end">
+              {selectedTrip.status === 'in_progress' ? (
+                <>
+                  <button type="button" className="btn btn-secondary" onClick={handleSaveProgress} disabled={saving}>
+                    {saving ? 'Salvando...' : 'Salvar andamento'}
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={handleCompleteTrip} disabled={saving}>
+                    Encerrar viagem
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-gray-600">Esta viagem já foi encerrada.</p>
+                  <button type="button" className="btn btn-secondary" onClick={() => setConfirmReopenOpen(true)} disabled={saving}>
+                    <RefreshIcon className="h-4 w-4" />
+                    {saving ? 'Reabrindo...' : 'Reabrir viagem'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 space-y-4">
+              <div className="card border-t-4 border-t-blue-600 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-semibold text-gray-900">Novo Lançamento</h3>
+                  {selectedTrip.status === 'in_progress' && (
+                    <div className="inline-flex border rounded-md p-0.5 bg-gray-50">
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('manual')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded ${movementTab === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        Gasto / Receita
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMovementTab('fuel')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded inline-flex items-center gap-1 ${movementTab === 'fuel' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        <FuelIcon />
+                        Abastecimento
+                      </button>
+                    </div>
                   )}
                 </div>
-                {selectedTrip.modality === 'per_ton' && (
-                  <div className="text-right">
-                    <div className="text-xs uppercase tracking-wide text-blue-700 font-semibold">Valor por tonelada</div>
-                    <div className="text-lg font-bold text-blue-900">{formatBRL(selectedTrip.rate_per_ton)}</div>
-                    <div className="text-sm text-blue-800">{formatQuantityDisplay(selectedTrip.tons)} ton informadas</div>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div className="p-3 border rounded">
-                  <div className="text-gray-500">Receita</div>
-                  <div className="font-semibold">{formatBRL(selectedTrip.total_value)}</div>
-                </div>
-                <div className="p-3 border rounded">
-                  <div className="text-gray-500">Despesa acumulada</div>
-                  <div className="font-semibold">{formatBRL(selectedTrip.expense_value)}</div>
-                </div>
-                <div className="p-3 border rounded">
-                  <div className="text-gray-500">Valor líquido da viagem</div>
-                  <div className="font-semibold">{formatBRL(selectedTrip.net_value)}</div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium">Data início</label>
-                  <input type="date" className="input-field w-full" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Data fim</label>
-                  <input type="date" className="input-field w-full" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Andamento da viagem</label>
-                  <select className="input-field w-full" value={progressType} onChange={(e) => setProgressType(e.target.value)} disabled={selectedTrip.status !== 'in_progress'}>
-                    <option value="">Selecione...</option>
-                    {progressTypeOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium">KM inicial</label>
-                  <input className="input-field w-full" value={initialKm} onChange={(e) => setInitialKm(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">KM final</label>
-                  <input className="input-field w-full" value={finalKm} onChange={(e) => setFinalKm(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-                </div>
-                <div className="flex items-end pb-2">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <div className="relative">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={isReceived}
-                        onChange={(e) => setIsReceived(e.target.checked)}
-                        disabled={selectedTrip.status !== 'in_progress'}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">Valor da viagem já recebido</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="border rounded p-3 space-y-3">
-                <h3 className="font-semibold">Lançar movimentação da viagem</h3>
-
-                {selectedTrip.status === 'in_progress' && (
-                  <div className="inline-flex border rounded-md p-0.5 bg-gray-50">
-                    <button
-                      type="button"
-                      onClick={() => setMovementTab('manual')}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded ${movementTab === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                      Gasto / Receita
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovementTab('fuel')}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded ${movementTab === 'fuel' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-900'}`}
-                    >
-                      ⛽ Abastecimento
-                    </button>
-                  </div>
-                )}
 
                 {(movementTab === 'manual' || selectedTrip.status !== 'in_progress') && (
                   <>
@@ -869,10 +912,7 @@ export default function TransportTrips() {
                       <input className="input-field w-full" value={movementDescription} onChange={(e) => setMovementDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} placeholder="Opcional para combustível ou categorias com descrição padrão. Obrigatória para os demais." />
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className="btn btn-secondary" onClick={handleAddMovement} disabled={saving || selectedTrip.status !== 'in_progress'}>
-                        {editingMovementId ? 'Salvar edição do lançamento' : 'Adicionar lançamento'}
-                      </button>
+                    <div className="flex flex-wrap gap-2 justify-end">
                       {editingMovementId && (
                         <button
                           type="button"
@@ -890,6 +930,9 @@ export default function TransportTrips() {
                           Cancelar edição
                         </button>
                       )}
+                      <button type="button" className="btn btn-primary" onClick={handleAddMovement} disabled={saving || selectedTrip.status !== 'in_progress'}>
+                        {editingMovementId ? 'Salvar edição do lançamento' : 'Adicionar Lançamento'}
+                      </button>
                     </div>
                   </>
                 )}
@@ -954,8 +997,9 @@ export default function TransportTrips() {
                       label="Calcular valor pago automaticamente"
                     />
 
-                    <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2">
-                      ✓ Isso registra o abastecimento no histórico do veículo (conta pra média de consumo) e já lança o valor pago como despesa "Combustível" nesta viagem.
+                    <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded px-3 py-2 flex items-start gap-1.5">
+                      <CheckIcon className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>Isso registra o abastecimento no histórico do veículo (conta pra média de consumo) e já lança o valor pago como despesa "Combustível" nesta viagem.</span>
                     </p>
 
                     <button type="submit" className="btn btn-secondary" disabled={saving}>
@@ -963,61 +1007,75 @@ export default function TransportTrips() {
                     </button>
                   </form>
                 )}
+              </div>
 
-                <div className="space-y-2 max-h-52 overflow-y-auto">
-                  {tripMovements.length === 0 ? (
-                    <p className="text-sm text-gray-500">Nenhum lançamento para esta viagem.</p>
-                  ) : tripMovements.map((movement) => (
-                    <div key={movement.id} className="border rounded p-2 text-sm flex items-center justify-between gap-2">
-                      <div>
-                        <div className="font-medium">{movement.movement_type === 'expense' ? 'Gasto' : 'Recebimento'} {movement.category_name ? `• ${movement.category_name}` : ''}</div>
-                        <div className="text-gray-600">{movement.description || 'Sem descrição'}</div>
-                        <div className="text-xs text-gray-500">{formatApiDate(movement.date, '')}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`font-semibold ${movement.movement_type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>
-                          {movement.movement_type === 'expense' ? '-' : '+'} {formatBRL(movement.amount)}
-                        </div>
-                        {selectedTrip.status === 'in_progress' && (
-                          <>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleEditMovement(movement)} disabled={saving}>Editar</button>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setConfirmDeleteMovement(movement)} disabled={saving}>Excluir</button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+              <div className="card p-4">
+                <div className="grid grid-cols-3 divide-x divide-gray-100 text-center">
+                  <div className="px-2">
+                    <div className="text-xs text-gray-500 font-medium">Bruto</div>
+                    <div className="text-lg font-bold text-gray-900">{formatBRL(selectedTrip.total_value)}</div>
+                  </div>
+                  <div className="px-2">
+                    <div className="text-xs text-gray-500 font-medium">Despesas</div>
+                    <div className="text-lg font-bold text-red-600">{formatBRL(selectedTrip.expense_value)}</div>
+                  </div>
+                  <div className="px-2">
+                    <div className="text-xs text-gray-500 font-medium">Líquido</div>
+                    <div className="text-lg font-bold text-green-600">{formatBRL(selectedTrip.net_value)}</div>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium">Observações da viagem</label>
-                <textarea className="input-field w-full" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} disabled={selectedTrip.status !== 'in_progress'} />
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {selectedTrip.status === 'in_progress' ? (
-                  <>
-                    <button type="button" className="btn btn-secondary" onClick={handleSaveProgress} disabled={saving}>
-                      {saving ? 'Salvando...' : 'Salvar andamento'}
-                    </button>
-                    <button type="button" className="btn btn-primary" onClick={handleCompleteTrip} disabled={saving}>
-                      Encerrar viagem
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm text-gray-600">Esta viagem já foi encerrada.</p>
-                    <button type="button" className="btn btn-secondary" onClick={() => setConfirmReopenOpen(true)} disabled={saving}>
-                      {saving ? 'Reabrindo...' : '🔄 Reabrir viagem'}
-                    </button>
+            <div className="lg:col-span-2 card p-4">
+              <h3 className="font-semibold text-gray-900 mb-2">Lançamentos recentes</h3>
+              <div className="max-h-[560px] overflow-y-auto">
+                {tripMovements.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhum lançamento para esta viagem.</p>
+                ) : tripMovements.map((movement) => (
+                  <div key={movement.id} className="flex items-center justify-between gap-3 py-2.5 border-b border-gray-100 last:border-b-0">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">
+                        {movement.description || (movement.movement_type === 'expense' ? 'Gasto' : 'Recebimento')}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {movement.category_name ? `${movement.category_name} · ` : ''}{formatApiDate(movement.date, '')}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-sm font-semibold ${movement.movement_type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>
+                        {movement.movement_type === 'expense' ? '-' : '+'} {formatBRL(movement.amount)}
+                      </span>
+                      {selectedTrip.status === 'in_progress' && (
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            aria-label="Editar lançamento"
+                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500"
+                            onClick={() => handleEditMovement(movement)}
+                            disabled={saving}
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Excluir lançamento"
+                            className="h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-500 hover:text-red-600"
+                            onClick={() => setConfirmDeleteMovement(movement)}
+                            disabled={saving}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <ConfirmModal
         open={Boolean(confirmDeleteMovement)}
